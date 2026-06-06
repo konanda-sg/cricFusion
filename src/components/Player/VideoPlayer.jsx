@@ -233,7 +233,12 @@ export default function VideoPlayer({ channel }) {
 
   // ── Fullscreen / PiP events ────────────────────────────────────────────
   useEffect(() => {
-    const onFS = () => update({ fullscreen: !!document.fullscreenElement })
+    const onFS = () => {
+      const isFS = !!document.fullscreenElement
+      update({ fullscreen: isFS })
+      // Unlock orientation whenever fullscreen exits (Escape key, browser back, etc.)
+      if (!isFS) try { screen.orientation?.unlock() } catch {}
+    }
     document.addEventListener('fullscreenchange', onFS)
     return () => document.removeEventListener('fullscreenchange', onFS)
   }, [])
@@ -300,9 +305,15 @@ export default function VideoPlayer({ channel }) {
 
   const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current; if (!el) return
-    document.fullscreenElement
-      ? await document.exitFullscreen().catch(() => {})
-      : await el.requestFullscreen().catch(() => {})
+    if (document.fullscreenElement) {
+      try { screen.orientation?.unlock() } catch {}
+      await document.exitFullscreen().catch(() => {})
+    } else {
+      await el.requestFullscreen().catch(() => {})
+      // Lock to landscape after fullscreen is established — works on Android Chrome.
+      // iOS Safari ignores this silently (it handles rotation natively).
+      try { await screen.orientation?.lock('landscape') } catch {}
+    }
   }, [])
 
   const togglePIP = useCallback(async () => {
