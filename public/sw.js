@@ -26,20 +26,6 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
-  // ── FanCode CDN stream proxy — adds fancode.com Referer so CDN allows the request ──
-  if (url.hostname.endsWith('.fancode.com')) {
-    event.respondWith(
-      fetch(event.request.url, {
-        method:         event.request.method,
-        referrer:       'https://www.fancode.com',
-        referrerPolicy: 'unsafe-url',
-        credentials:    'omit',
-        cache:          'no-store',
-      }).catch(() => fetch(event.request))
-    )
-    return
-  }
-
   // ── Batch channel list (jtvv) ─────────────────────────────────────────────
   if (url.pathname === '/cf-data') {
     event.respondWith(

@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/fc-cdn/:path*",
+      "destination": "https://in-mc-fblive.fancode.com/:path*"
+    }
+  ]
+}
