@@ -13,7 +13,7 @@ export default function PlayerControls({
   state, channel,
   onPlayPause, onSeek, onSeekTo, onVolume, onMute,
   onFullscreen, onPIP, onGoLive, onToggleQuality, onLock,
-  objectFit, onFitChange,
+  objectFit, onFitChange, subtitleActive,
 }) {
   const { playing, muted, volume, currentTime, duration, buffered, fullscreen, isLive } = state
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -210,8 +210,8 @@ export default function PlayerControls({
             </motion.button>
           )}
 
-          {/* Quality */}
-          <ControlBtn onClick={onToggleQuality} title="Quality (Q)" active={state.showQualityMenu}>
+          {/* Settings (quality + subtitles) */}
+          <ControlBtn onClick={onToggleQuality} title="Settings" active={state.showQualityMenu || subtitleActive}>
             <Settings size={15} className={state.showQualityMenu ? 'animate-spin-slow' : ''} />
           </ControlBtn>
 

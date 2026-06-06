@@ -3,8 +3,9 @@ import Hls from 'hls.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lock, LockOpen, Sun, Volume2 as VolumeSwipeIcon } from 'lucide-react'
 import PlayerControls from './PlayerControls'
-import QualityMenu from './QualityMenu'
+import SettingsMenu from './SettingsMenu'
 import SeekIndicator from './SeekIndicator'
+import SubtitleOverlay from './SubtitleOverlay'
 
 // Extract the __hdnea__ token from a Jio CDN URL to re-append on segment requests
 function extractToken(url) {
@@ -23,6 +24,12 @@ export default function VideoPlayer({ channel }) {
   const liveRef     = useRef({})   // always-fresh mirror of state for closures
   const gestureRef  = useRef({ active: false, isSwipe: false, side: null, startY: 0, startValue: 0, pinchActive: false, pinchDist: 0, startZoom: 1 })
   const swipeHideTimer = useRef(null)
+  const speechRef          = useRef(null)   // SpeechRecognition instance
+  const finalTextRef       = useRef('')     // accumulated final speech text
+  const subtitleTrackClean = useRef(null)   // cleanup fn for active TextTrack listener
+  const subClearTimer      = useRef(null)   // clears subtitle text after silence gap
+
+  const [streamTracks, setStreamTracks] = useState([])   // detected text tracks from stream
 
   const [state, setState] = useState({
     playing: false,
@@ -46,6 +53,9 @@ export default function VideoPlayer({ channel }) {
     zoom: 1,                // pinch zoom scale
     brightness: 1,          // CSS filter brightness (0.1 – 2.0)
     swipeIndicator: null,   // { type, barValue, displayValue, side }
+    subtitleMode: null,     // null | { type: 'track', index } | { type: 'speech' }
+    subtitleText: '',       // current subtitle line(s) to display
+    subtitleInterim: '',    // interim speech text (lighter colour)
   })
 
   const update = useCallback((patch) => {
@@ -61,7 +71,15 @@ export default function VideoPlayer({ channel }) {
     const video = videoRef.current
     if (!video || !channel?.url) return
 
-    update({ loading: true, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto' })
+    update({ loading: true, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
+    setStreamTracks([])
+
+    // Stop any active subtitle session
+    clearTimeout(subClearTimer.current)
+    const oldR = speechRef.current; speechRef.current = null
+    if (oldR) try { oldR.stop() } catch {}
+    if (subtitleTrackClean.current) { subtitleTrackClean.current(); subtitleTrackClean.current = null }
+    finalTextRef.current = ''
 
     // Tear down any existing player
     if (hlsRef.current)   { hlsRef.current.destroy();  hlsRef.current  = null }
@@ -261,6 +279,128 @@ export default function VideoPlayer({ channel }) {
     return () => { v.removeEventListener('enterpictureinpicture', onEnter); v.removeEventListener('leavepictureinpicture', onLeave) }
   }, [])
 
+  // ── TextTrack detection (CEA-608 from HLS / TTML from DASH) ─────────
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const detect = () => {
+      const tracks = Array.from(video.textTracks).filter(
+        (t) => t.kind === 'subtitles' || t.kind === 'captions'
+      )
+      setStreamTracks(tracks.map((t, i) => ({
+        index: i,
+        label: t.label || (t.language ? `[${t.language}]` : `Track ${i + 1}`),
+      })))
+    }
+    video.textTracks.addEventListener('addtrack',    detect)
+    video.textTracks.addEventListener('removetrack', detect)
+    detect()
+    return () => {
+      video.textTracks.removeEventListener('addtrack',    detect)
+      video.textTracks.removeEventListener('removetrack', detect)
+    }
+  }, [])
+
+  // ── Subtitle apply (track or speech) ─────────────────────────────────
+  const applySubtitle = useCallback((mode) => {
+    // Close the settings menu
+    update({ showQualityMenu: false })
+
+    // Tear down previous mode
+    clearTimeout(subClearTimer.current)
+    const oldR = speechRef.current; speechRef.current = null
+    if (oldR) try { oldR.stop() } catch {}
+    if (subtitleTrackClean.current) { subtitleTrackClean.current(); subtitleTrackClean.current = null }
+    finalTextRef.current = ''
+
+    // Disable all text tracks
+    Array.from(videoRef.current?.textTracks || []).forEach((t) => { t.mode = 'disabled' })
+
+    update({ subtitleMode: mode, subtitleText: '', subtitleInterim: '' })
+
+    if (!mode) return
+
+    if (mode.type === 'track') {
+      const track = Array.from(videoRef.current?.textTracks || [])[mode.index]
+      if (!track) return
+      track.mode = 'hidden'
+      const onCue = () => {
+        const cues = Array.from(track.activeCues || [])
+        const el = document.createElement('div')
+        const text = cues.map((c) => {
+          el.innerHTML = c.text || ''
+          return el.textContent || ''
+        }).join('\n').trim()
+        update({ subtitleText: text })
+      }
+      track.addEventListener('cuechange', onCue)
+      subtitleTrackClean.current = () => {
+        track.removeEventListener('cuechange', onCue)
+        try { track.mode = 'disabled' } catch {}
+      }
+      return
+    }
+
+    if (mode.type === 'speech') {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (!SR) {
+        update({ subtitleText: 'Speech recognition not supported in this browser.', subtitleMode: null })
+        setTimeout(() => update({ subtitleText: '' }), 3000)
+        return
+      }
+      const lang = channel?.language === 'Hindi' ? 'hi-IN' : 'en-US'
+      const r = new SR()
+      r.continuous     = true
+      r.interimResults = true
+      r.lang           = lang
+      r.maxAlternatives = 1
+
+      r.onresult = (e) => {
+        let newFinal = ''; let interim = ''
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) newFinal += e.results[i][0].transcript + ' '
+          else interim = e.results[i][0].transcript
+        }
+        clearTimeout(subClearTimer.current)
+        if (newFinal) {
+          finalTextRef.current = (finalTextRef.current + newFinal).slice(-400)
+          const recent = finalTextRef.current.trim().split(/(?<=[.!?])\s+/).slice(-2).join(' ')
+          update({ subtitleText: recent, subtitleInterim: '' })
+          // Clear text 4 s after the last spoken word
+          subClearTimer.current = setTimeout(() => {
+            finalTextRef.current = ''
+            update({ subtitleText: '', subtitleInterim: '' })
+          }, 4000)
+        } else if (interim) {
+          update({ subtitleInterim: interim })
+          // Extend the clear deadline while speech is in progress
+          subClearTimer.current = setTimeout(() => {
+            finalTextRef.current = ''
+            update({ subtitleText: '', subtitleInterim: '' })
+          }, 5000)
+        }
+      }
+
+      r.onerror = (e) => {
+        if (e.error === 'no-speech') return
+        if (e.error !== 'aborted') {
+          update({ subtitleText: `Mic: ${e.error}`, subtitleInterim: '' })
+          setTimeout(() => update({ subtitleText: '' }), 2500)
+        }
+      }
+
+      r.onend = () => {
+        // Auto-restart only if this same instance is still active
+        if (speechRef.current === r && liveRef.current.subtitleMode?.type === 'speech') {
+          try { r.start() } catch {}
+        }
+      }
+
+      r.start()
+      speechRef.current = r
+    }
+  }, [channel?.language, update])
+
   // ── Controls auto-hide ────────────────────────────────────────────────
   const showControlsTemporarily = useCallback(() => {
     update({ showControls: true })
@@ -275,6 +415,7 @@ export default function VideoPlayer({ channel }) {
     clearTimeout(seekIndicatorTimer.current)
     clearTimeout(clickTimer.current)
     clearTimeout(swipeHideTimer.current)
+    clearTimeout(subClearTimer.current)
   }, [])
 
   // ── Player actions ────────────────────────────────────────────────────
@@ -573,6 +714,13 @@ export default function VideoPlayer({ channel }) {
         )}
       </AnimatePresence>
 
+      {/* ── Subtitle overlay ── */}
+      <SubtitleOverlay
+        text={state.subtitleText}
+        interim={state.subtitleInterim}
+        controlsVisible={!state.locked && (state.showControls || !state.playing)}
+      />
+
       {/* ── Locked overlay ── */}
       <AnimatePresence>
         {state.locked && (
@@ -668,6 +816,7 @@ export default function VideoPlayer({ channel }) {
               onGoLive={goLive}
               onToggleQuality={() => update({ showQualityMenu: !state.showQualityMenu })}
               onLock={() => update({ locked: true, showControls: false })}
+              subtitleActive={state.subtitleMode !== null}
               objectFit={state.objectFit}
               onFitChange={cycleFit}
             />
@@ -675,13 +824,16 @@ export default function VideoPlayer({ channel }) {
         )}
       </AnimatePresence>
 
-      {/* Quality menu */}
+      {/* Settings menu (quality + subtitles) */}
       <AnimatePresence>
         {state.showQualityMenu && (
-          <QualityMenu
+          <SettingsMenu
             levels={qualityLevels}
-            current={state.quality}
-            onSelect={setQuality}
+            currentQuality={state.quality}
+            onSelectQuality={setQuality}
+            streamTracks={streamTracks}
+            subtitleMode={state.subtitleMode}
+            onSelectSubtitle={applySubtitle}
             onClose={() => update({ showQualityMenu: false })}
           />
         )}
