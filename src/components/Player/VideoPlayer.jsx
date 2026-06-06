@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import Hls from 'hls.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Lock, LockOpen } from 'lucide-react'
+import { Lock, LockOpen, Sun, Volume2 as VolumeSwipeIcon } from 'lucide-react'
 import PlayerControls from './PlayerControls'
 import QualityMenu from './QualityMenu'
 import SeekIndicator from './SeekIndicator'
@@ -21,6 +21,8 @@ export default function VideoPlayer({ channel }) {
   const seekIndicatorTimer = useRef(null)
   const clickTimer  = useRef(null)
   const liveRef     = useRef({})   // always-fresh mirror of state for closures
+  const gestureRef  = useRef({ active: false, isSwipe: false, side: null, startY: 0, startValue: 0, pinchActive: false, pinchDist: 0, startZoom: 1 })
+  const swipeHideTimer = useRef(null)
 
   const [state, setState] = useState({
     playing: false,
@@ -40,6 +42,10 @@ export default function VideoPlayer({ channel }) {
     seekIndicator: null,
     isLive: false,
     locked: false,
+    objectFit: 'contain',   // 'contain' | 'cover' | 'fill'
+    zoom: 1,                // pinch zoom scale
+    brightness: 1,          // CSS filter brightness (0.1 – 2.0)
+    swipeIndicator: null,   // { type, barValue, displayValue, side }
   })
 
   const update = useCallback((patch) => {
@@ -268,6 +274,7 @@ export default function VideoPlayer({ channel }) {
     clearTimeout(hideTimer.current)
     clearTimeout(seekIndicatorTimer.current)
     clearTimeout(clickTimer.current)
+    clearTimeout(swipeHideTimer.current)
   }, [])
 
   // ── Player actions ────────────────────────────────────────────────────
@@ -340,6 +347,84 @@ export default function VideoPlayer({ channel }) {
     v.play()
   }, [])
 
+  // ── Aspect ratio cycle ────────────────────────────────────────────────
+  const cycleFit = useCallback(() => {
+    const fits = ['contain', 'cover', 'fill']
+    const next = fits[(fits.indexOf(liveRef.current.objectFit) + 1) % fits.length]
+    update({ objectFit: next, zoom: 1 })
+  }, [update])
+
+  // ── Swipe gesture handlers (brightness left / volume right / pinch zoom) ─
+  const handleTouchStart = useCallback((e) => {
+    if (liveRef.current.locked) return
+    clearTimeout(swipeHideTimer.current)
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      gestureRef.current = { ...gestureRef.current, pinchActive: true, pinchDist: Math.hypot(dx, dy), startZoom: liveRef.current.zoom, active: false }
+      return
+    }
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const side = (t.clientX - rect.left) < rect.width / 2 ? 'left' : 'right'
+      gestureRef.current = { active: true, isSwipe: false, side, startY: t.clientY, startValue: side === 'left' ? liveRef.current.brightness : liveRef.current.volume, pinchActive: false, pinchDist: 0, startZoom: liveRef.current.zoom }
+    }
+  }, [])
+
+  const handleTouchMove = useCallback((e) => {
+    if (liveRef.current.locked) return
+    // Pinch zoom
+    if (gestureRef.current.pinchActive && e.touches.length === 2) {
+      e.preventDefault()
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      const newZoom = Math.max(1, Math.min(3, gestureRef.current.startZoom * (Math.hypot(dx, dy) / gestureRef.current.pinchDist)))
+      update({ zoom: newZoom })
+      return
+    }
+    if (!gestureRef.current.active || e.touches.length !== 1) return
+    const deltaY = gestureRef.current.startY - e.touches[0].clientY
+    if (!gestureRef.current.isSwipe) {
+      if (Math.abs(deltaY) < 12) return
+      gestureRef.current.isSwipe = true
+    }
+    e.preventDefault()
+    clearTimeout(swipeHideTimer.current)
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    if (gestureRef.current.side === 'left') {
+      const brightness = Math.max(0.1, Math.min(2, gestureRef.current.startValue + (deltaY / rect.height) * 2))
+      update({ brightness, swipeIndicator: { type: 'brightness', barValue: (brightness - 0.1) / 1.9, displayValue: Math.round(brightness * 100), side: 'left' } })
+    } else {
+      const volume = Math.max(0, Math.min(1, gestureRef.current.startValue + deltaY / rect.height))
+      if (videoRef.current) { videoRef.current.volume = volume; videoRef.current.muted = volume === 0 }
+      update({ volume, swipeIndicator: { type: 'volume', barValue: volume, displayValue: Math.round(volume * 100), side: 'right' } })
+    }
+  }, [update])
+
+  const handleTouchEnd = useCallback(() => {
+    gestureRef.current.active = false
+    gestureRef.current.pinchActive = false
+    clearTimeout(swipeHideTimer.current)
+    swipeHideTimer.current = setTimeout(() => update({ swipeIndicator: null }), 1200)
+  }, [update])
+
+  // Register non-passive listeners so preventDefault actually stops page scroll
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('touchstart', handleTouchStart, { passive: true })
+    el.addEventListener('touchmove',  handleTouchMove,  { passive: false })
+    el.addEventListener('touchend',   handleTouchEnd,   { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart)
+      el.removeEventListener('touchmove',  handleTouchMove)
+      el.removeEventListener('touchend',   handleTouchEnd)
+    }
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd])
+
   const setQuality = useCallback((levelId) => {
     if (shakaRef.current) {
       if (levelId === -1) {
@@ -411,7 +496,17 @@ export default function VideoPlayer({ channel }) {
       onMouseEnter={() => update({ showControls: true })}
       onMouseLeave={() => { if (liveRef.current.playing) update({ showControls: false }) }}
     >
-      <video ref={videoRef} className="w-full h-full object-contain" playsInline preload="auto" />
+      <video
+        ref={videoRef}
+        className="w-full h-full"
+        style={{
+          objectFit: state.objectFit,
+          transform: `scale(${state.zoom})`,
+          filter: `brightness(${state.brightness})`,
+          transformOrigin: 'center',
+        }}
+        playsInline preload="auto"
+      />
 
       {/* Loading spinner */}
       <AnimatePresence>
@@ -443,6 +538,40 @@ export default function VideoPlayer({ channel }) {
 
       {/* Seek indicator */}
       <SeekIndicator type={state.seekIndicator} />
+
+      {/* ── Swipe indicator (brightness / volume) ── */}
+      <AnimatePresence>
+        {state.swipeIndicator && (
+          <motion.div
+            key={state.swipeIndicator.type}
+            initial={{ opacity: 0, x: state.swipeIndicator.side === 'left' ? -16 : 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className={`absolute top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2 bg-black/65 backdrop-blur-md rounded-2xl px-3 py-4 pointer-events-none ${
+              state.swipeIndicator.side === 'left' ? 'left-4' : 'right-4'
+            }`}
+          >
+            {state.swipeIndicator.type === 'brightness'
+              ? <Sun size={18} className="text-yellow-400" />
+              : <VolumeSwipeIcon size={18} className="text-white" />
+            }
+            {/* Vertical bar */}
+            <div className="w-1.5 h-24 bg-white/20 rounded-full overflow-hidden relative">
+              <motion.div
+                className={`absolute bottom-0 left-0 right-0 rounded-full ${
+                  state.swipeIndicator.type === 'brightness' ? 'bg-yellow-400' : 'bg-white'
+                }`}
+                animate={{ height: `${Math.round(state.swipeIndicator.barValue * 100)}%` }}
+                transition={{ duration: 0.06 }}
+              />
+            </div>
+            <span className="text-white text-[11px] font-bold tabular-nums">
+              {state.swipeIndicator.displayValue}%
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Locked overlay ── */}
       <AnimatePresence>
@@ -539,6 +668,8 @@ export default function VideoPlayer({ channel }) {
               onGoLive={goLive}
               onToggleQuality={() => update({ showQualityMenu: !state.showQualityMenu })}
               onLock={() => update({ locked: true, showControls: false })}
+              objectFit={state.objectFit}
+              onFitChange={cycleFit}
             />
           </motion.div>
         )}

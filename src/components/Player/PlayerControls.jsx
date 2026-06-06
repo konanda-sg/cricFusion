@@ -7,10 +7,13 @@ import {
 } from 'lucide-react'
 import { formatTime } from '../../utils/formatTime'
 
+const FIT_CYCLE = { contain: 'Fit', cover: 'Crop', fill: 'Full' }
+
 export default function PlayerControls({
   state, channel,
   onPlayPause, onSeek, onSeekTo, onVolume, onMute,
-  onFullscreen, onPIP, onGoLive, onToggleQuality, onLock
+  onFullscreen, onPIP, onGoLive, onToggleQuality, onLock,
+  objectFit, onFitChange,
 }) {
   const { playing, muted, volume, currentTime, duration, buffered, fullscreen, isLive } = state
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -218,6 +221,16 @@ export default function PlayerControls({
               <PictureInPicture2 size={15} />
             </ControlBtn>
           )}
+
+          {/* Aspect ratio */}
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={onFitChange}
+            title="Aspect ratio"
+            className="h-8 px-2 text-white/75 hover:text-white hover:bg-white/10 rounded-lg text-[11px] font-bold transition-all"
+          >
+            {FIT_CYCLE[objectFit] ?? 'Fit'}
+          </motion.button>
 
           {/* Lock controls */}
           <ControlBtn onClick={onLock} title="Lock controls">
