@@ -2,8 +2,9 @@
 // Requests made FROM this SW are NOT visible in the browser's Network tab.
 // Page sees /cf-data or /cf-dynamic?id=...; real upstream URLs stay hidden.
 
-const BATCH_URL   = 'https://jtvv.pages.dev/channels.json'
-const DYNAMIC_URL = 'https://newwwwapiiiiii.vercel.app/main'
+const BATCH_URL    = 'https://jtvv.pages.dev/channels.json'
+const DYNAMIC_URL  = 'https://newwwwapiiiiii.vercel.app/main'
+const FANCODE_URL  = 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json'
 
 function b64(text) {
   return btoa(unescape(encodeURIComponent(text)))
@@ -29,6 +30,17 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/cf-data') {
     event.respondWith(
       fetch(BATCH_URL, { cache: 'no-store', credentials: 'omit' })
+        .then((r) => r.text())
+        .then(makeResponse)
+        .catch(() => new Response('error', { status: 502 }))
+    )
+    return
+  }
+
+  // ── FanCode live events ───────────────────────────────────────────────────
+  if (url.pathname === '/cf-fancode') {
+    event.respondWith(
+      fetch(FANCODE_URL, { cache: 'no-store', credentials: 'omit' })
         .then((r) => r.text())
         .then(makeResponse)
         .catch(() => new Response('error', { status: 502 }))

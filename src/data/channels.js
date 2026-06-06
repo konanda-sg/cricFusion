@@ -134,6 +134,39 @@ export function mapDynamicChannel(apiData, id) {
   }
 }
 
+// ── FanCode live events (drmlive/fancode-live-events) ────────────────────────
+const FC_CATEGORY = {
+  Cricket:     'cricket',
+  Football:    'football',
+  Tennis:      'tennis',
+  Basketball:  'basketball',
+  MotoGP:      'formula1',
+  Motorsports: 'formula1',
+  'Formula 1': 'formula1',
+  Boxing:      'boxing',
+}
+
+export function mapFanCodeChannel(match) {
+  return {
+    id:           match.match_id,
+    key:          `fc_${match.match_id}`,
+    name:         match.event_name,
+    category:     FC_CATEGORY[match.event_category] || 'multi',
+    currentMatch: match.match_name,
+    thumbnail:    match.src,
+    logo:         'FC',
+    isLive:       match.status === 'LIVE',
+    viewers:      '—',
+    badge:        'HD',
+    language:     'English',
+    description:  match.title,
+    score:        null,
+    url:          match.adfree_url,
+    clearKey:     null,
+    quality:      ['Auto', '1080p', '720p', '480p'],
+  }
+}
+
 // ── Static channels (fixed URLs, not in any API) ─────────────────────────────
 export const STATIC_CHANNELS = [
   {

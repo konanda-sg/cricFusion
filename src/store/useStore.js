@@ -1,12 +1,13 @@
 import { create } from 'zustand'
 import {
   CHANNEL_ORDER, STATIC_CHANNELS, mapApiChannel,
-  DYNAMIC_CHANNEL_IDS, mapDynamicChannel,
+  DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel,
 } from '../data/channels'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 
 const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
 const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?id=...
+const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-events
 
 // SW base64-encodes responses; decode back to JSON string
 function decode(text, swActive) {
@@ -42,16 +43,18 @@ export const useStore = create((set, get) => ({
     // SW controller may be null on first load even after serviceWorker.ready
     // (clients.claim() propagates async). Fall back to direct URLs so channels
     // always load; SW proxy kicks in on second+ page load.
-    const swActive = !!(navigator.serviceWorker?.controller)
-    const batchUrl = swActive ? PROXY : 'https://jtvv.pages.dev/channels.json'
-    const dynUrl   = (id) => swActive
+    const swActive  = !!(navigator.serviceWorker?.controller)
+    const batchUrl  = swActive ? PROXY : 'https://jtvv.pages.dev/channels.json'
+    const fanCodeUrl = swActive ? FANCODE_PROXY : 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json'
+    const dynUrl    = (id) => swActive
       ? `${DYNAMIC_PROXY}?id=${id}`
       : `https://newwwwapiiiiii.vercel.app/main?id=${id}`
 
     try {
-      // Fire both APIs in parallel — SW proxies both so real URLs stay hidden
-      const [batchResult, ...dynamicResults] = await Promise.allSettled([
+      // Fire all APIs in parallel — SW proxies so real URLs stay hidden
+      const [batchResult, fanCodeResult, ...dynamicResults] = await Promise.allSettled([
         fetch(batchUrl).then((r) => r.text()),
+        fetch(fanCodeUrl).then((r) => r.text()),
         ...DYNAMIC_CHANNEL_IDS.map((id) => fetch(dynUrl(id)).then((r) => r.text())),
       ])
 
@@ -70,6 +73,15 @@ export const useStore = create((set, get) => ({
         }
       }
 
+      // ── FanCode live events ────────────────────────────────────────────
+      let fanCodeChannels = []
+      if (fanCodeResult.status === 'fulfilled') {
+        const json = decode(fanCodeResult.value, swActive)
+        fanCodeChannels = (json?.matches || [])
+          .filter((m) => m.status === 'LIVE' && m.adfree_url)
+          .map(mapFanCodeChannel)
+      }
+
       // ── Per-channel dynamic channels ───────────────────────────────────
       const dynamicChannels = dynamicResults
         .map((result, i) => {
@@ -81,7 +93,7 @@ export const useStore = create((set, get) => ({
         .filter(Boolean)
 
       set({
-        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS],
+        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fanCodeChannels],
         channelsLoading: false,
         lastFetched: Date.now(),
       })
