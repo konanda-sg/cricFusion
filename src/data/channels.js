@@ -161,7 +161,9 @@ export function mapFanCodeChannel(match) {
     language:     'English',
     description:  match.title,
     score:        null,
-    url:          match.adfree_url,
+    url:          match.adfree_url || match.dai_url,
+    fallbackUrl:  (match.adfree_url && match.dai_url && match.adfree_url !== match.dai_url)
+                    ? match.dai_url : null,
     clearKey:     null,
     quality:      ['Auto', '1080p', '720p', '480p'],
   }

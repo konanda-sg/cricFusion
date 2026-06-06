@@ -28,6 +28,7 @@ export default function VideoPlayer({ channel }) {
   const finalTextRef       = useRef('')     // accumulated final speech text
   const subtitleTrackClean = useRef(null)   // cleanup fn for active TextTrack listener
   const subClearTimer      = useRef(null)   // clears subtitle text after silence gap
+  const fallbackTriedRef   = useRef(false)  // true once fallbackUrl has been attempted
 
   const [streamTracks, setStreamTracks] = useState([])   // detected text tracks from stream
 
@@ -71,6 +72,7 @@ export default function VideoPlayer({ channel }) {
     const video = videoRef.current
     if (!video || !channel?.url) return
 
+    fallbackTriedRef.current = false
     update({ loading: true, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
     setStreamTracks([])
 
@@ -140,10 +142,14 @@ export default function VideoPlayer({ channel }) {
       player.addEventListener('error', (e) => {
         const err = e.detail
         console.warn('Shaka error (severity', err?.severity, 'code', err?.code, ')', err)
-        // Severity 2 = CRITICAL (unrecoverable), 1 = RECOVERABLE (Shaka handles it internally)
-        // Only block the player for truly fatal errors — not segment/parse warnings
         const isCritical = err?.severity === 2
-        if (!isCritical) return   // recoverable: just log, keep playing
+        if (!isCritical) return
+        if (channel.fallbackUrl && !fallbackTriedRef.current) {
+          fallbackTriedRef.current = true
+          update({ error: null, loading: true })
+          player.load(channel.fallbackUrl).catch(() => update({ error: 'Stream failed.', loading: false }))
+          return
+        }
         const msg =
           err.code === 6007  ? 'DRM licence request failed. Key may be wrong.' :
           err.code === 1001  ? 'Network error — CDN unreachable.' :
@@ -181,9 +187,11 @@ export default function VideoPlayer({ channel }) {
           await player.load(channel.url)
         } catch (err) {
           console.error('Shaka load failed', err)
-          // If streaming already started (manifest + first segment played), the
-          // load() rejection can be a false alarm — don't stomp the playing state.
           if (liveRef.current.playing || (liveRef.current.currentTime ?? 0) > 0) return
+          if (channel.fallbackUrl && !fallbackTriedRef.current) {
+            fallbackTriedRef.current = true
+            try { await player.load(channel.fallbackUrl); return } catch {}
+          }
           const msg =
             err.code === 6007  ? 'DRM key mismatch — check clearKey in channels.js.' :
             err.code === 1001  ? 'Network error — CDN unreachable.' :
@@ -217,8 +225,16 @@ export default function VideoPlayer({ channel }) {
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
         if (d.fatal) {
-          update({ error: 'Stream error. Retrying…', loading: false })
-          setTimeout(() => { if (hlsRef.current) { hlsRef.current.startLoad(); update({ error: null, loading: true }) } }, 3000)
+          if (channel.fallbackUrl && !fallbackTriedRef.current) {
+            fallbackTriedRef.current = true
+            update({ error: null, loading: true })
+            hls.stopLoad()
+            hls.loadSource(channel.fallbackUrl)
+            hls.startLoad()
+          } else {
+            update({ error: 'Stream error. Retrying…', loading: false })
+            setTimeout(() => { if (hlsRef.current) { hlsRef.current.startLoad(); update({ error: null, loading: true }) } }, 3000)
+          }
         }
       })
       return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null } }
