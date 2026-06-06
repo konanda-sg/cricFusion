@@ -7,46 +7,48 @@
 export const CHANNEL_ORDER = ['EN', 'sidhu', 'EN2', 'sidhu2', 's1', 's2', 's3', 's5']
 
 // Per-channel UI metadata keyed by the API's channel id
+const T = (id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=640&h=360&q=80`
+
 const CHANNEL_META = {
   EN: {
     name: 'Star Sports HD1', logo: 'SS1', category: 'cricket',
     language: 'English', badge: 'HD', viewers: '2.4M',
-    thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail: T('1540747913346-19212a4b423f'),   // cricket stadium panorama
   },
   sidhu: {
     name: 'Star Sports HD1 Hindi', logo: 'SS1H', category: 'cricket',
     language: 'Hindi', badge: 'HD', viewers: '3.1M',
-    thumbnail: 'https://images.unsplash.com/photo-1540747913346-19212a4b423f?w=640&q=80',
+    thumbnail: T('1531415074968-036ba1b575da'),    // cricket action
   },
   EN2: {
     name: 'Star Sports HD2', logo: 'SS2', category: 'cricket',
     language: 'English', badge: 'HD', viewers: '1.8M',
-    thumbnail: 'https://images.unsplash.com/photo-1624555130581-1d9cca783bc0?w=640&q=80',
+    thumbnail: T('1624555130581-1d9cca783bc0'),    // cricket pitch
   },
   sidhu2: {
     name: 'Star Sports HD2 Hindi', logo: 'SS2H', category: 'cricket',
     language: 'Hindi', badge: 'HD', viewers: '1.2M',
-    thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail: T('1595435741984-3a9a5f5ebe68'),    // cricket crowd
   },
   s1: {
     name: 'Sony LIV Sports 1', logo: 'SL1', category: 'multi',
     language: 'English', badge: 'HD', viewers: '1.6M',
-    thumbnail: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=640&q=80',
+    thumbnail: T('1574629810360-7efbbe195018'),    // football
   },
   s2: {
     name: 'Sony LIV Sports 2', logo: 'SL2', category: 'multi',
     language: 'English', badge: 'HD', viewers: '980K',
-    thumbnail: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=640&q=80',
+    thumbnail: T('1461896836934-ffe607ba8211'),    // sports stadium
   },
   s3: {
     name: 'Sony LIV Sports 3', logo: 'SL3', category: 'multi',
     language: 'English', badge: 'HD', viewers: '750K',
-    thumbnail: 'https://images.unsplash.com/photo-1546519638405-a9f1e9a4f7c5?w=640&q=80',
+    thumbnail: T('1546519638405-a9f1e9a4f7c5'),    // basketball arena
   },
   s5: {
     name: 'Sony LIV Sports 5', logo: 'SL5', category: 'multi',
     language: 'English', badge: 'HD', viewers: '620K',
-    thumbnail: 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=640&q=80',
+    thumbnail: T('1568605117036-5fe5e7bab0b7'),    // running track
   },
 }
 
@@ -59,7 +61,7 @@ export function mapApiChannel(key, apiData, id) {
     language: 'English',
     badge: 'HD',
     viewers: '1M',
-    thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail: T('1540747913346-19212a4b423f'),
   }
   return {
     id,
@@ -91,17 +93,17 @@ const DYNAMIC_META = {
   willow: {
     name: 'Willow TV',       logo: 'WLW',  category: 'cricket',
     language: 'English', badge: 'HD',  viewers: '750K',
-    thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail: T('1508098682722-e99c43a406b2'),    // cricket match
   },
   skynz1uhd: {
     name: 'Sky Sport 1 UHD', logo: 'SKY1', category: 'cricket',
     language: 'English', badge: '4K',  viewers: '420K',
-    thumbnail: 'https://images.unsplash.com/photo-1624555130581-1d9cca783bc0?w=640&q=80',
+    thumbnail: T('1574629810360-7efbbe195018'),    // NZ/sky sports feel
   },
   e1s4: {
     name: null,              logo: 'E1S4', category: 'multi',
     language: 'English', badge: 'HD',  viewers: '350K',
-    thumbnail: 'https://images.unsplash.com/photo-1546519638405-a9f1e9a4f7c5?w=640&q=80',
+    thumbnail: T('1461896836934-ffe607ba8211'),    // multi-sport stadium
   },
 }
 
@@ -116,7 +118,7 @@ export function mapDynamicChannel(apiData, id) {
     name,
     category:     meta.category    ?? 'multi',
     currentMatch: `${name} — Live`,
-    thumbnail:    meta.thumbnail   ?? 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail:    meta.thumbnail   ?? T('1540747913346-19212a4b423f'),
     logo:         meta.logo        ?? apiData.id.slice(0, 4).toUpperCase(),
     isLive:       true,
     viewers:      meta.viewers     ?? '500K',
@@ -140,7 +142,7 @@ export const STATIC_CHANNELS = [
     name: 'Willow Sports',
     category: 'cricket',
     currentMatch: 'Willow Sports — Live',
-    thumbnail: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=640&q=80',
+    thumbnail: T('1568605117036-5fe5e7bab0b7'),
     logo: 'WLW',
     isLive: true,
     viewers: '890K',
@@ -158,7 +160,7 @@ export const STATIC_CHANNELS = [
     name: 'Willow — NZ vs ENG',
     category: 'cricket',
     currentMatch: 'New Zealand vs England — Live',
-    thumbnail: 'https://images.unsplash.com/photo-1624555130581-1d9cca783bc0?w=640&q=80',
+    thumbnail: T('1546519638405-a9f1e9a4f7c5'),
     logo: 'WLW',
     isLive: true,
     viewers: '1.1M',

@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Users, Play } from 'lucide-react'
+import { Users, Play, Tv2 } from 'lucide-react'
 
 export default function ChannelCard({ channel, index = 0 }) {
   const navigate = useNavigate()
+  const [imgFailed, setImgFailed] = useState(false)
 
   const badgeColor = {
     '4K': 'bg-purple-600 text-white',
@@ -22,12 +24,20 @@ export default function ChannelCard({ channel, index = 0 }) {
     >
       {/* Thumbnail */}
       <div className="relative overflow-hidden aspect-video">
-        <img
-          src={channel.thumbnail}
-          alt={channel.name}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-          loading="lazy"
-        />
+        {imgFailed ? (
+          <div className="w-full h-full gradient-brand flex flex-col items-center justify-center gap-2">
+            <Tv2 size={32} className="text-white/40" />
+            <span className="text-white/50 text-xs font-bold tracking-wider">{channel.logo}</span>
+          </div>
+        ) : (
+          <img
+            src={channel.thumbnail}
+            alt={channel.name}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+          />
+        )}
 
         {/* Overlay gradient */}
         <div className="absolute inset-0 channel-overlay" />
