@@ -75,7 +75,7 @@ export default function VideoPlayer({ channel }) {
     let isCancelled = false
     let hlsRetryTimer = null
     fallbackTriedRef.current = false
-    update({ loading: true, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
+    update({ loading: true, playing: false, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
     setStreamTracks([])
 
     // Stop any active subtitle session
@@ -172,15 +172,23 @@ export default function VideoPlayer({ channel }) {
         // Stream is live — clear any stale error overlay immediately
         update({ qualityLevels: levels, loading: false, isLive: player.isLive(), error: null })
 
+        const tryPlay = () => {
+          video.play().catch((err) => {
+            if (err.name === 'AbortError' && !isCancelled) {
+              video.addEventListener('canplay', () => { if (!isCancelled) video.play().catch(() => {}) }, { once: true })
+            }
+          })
+        }
+
         // Jump to live edge
         if (player.isLive()) {
           setTimeout(() => {
             const range = player.seekRange()
             if (range.end > 0) video.currentTime = range.end
-            video.play().catch(() => {})
+            tryPlay()
           }, 500)
         } else {
-          video.play().catch(() => {})
+          tryPlay()
         }
       })
 
@@ -221,7 +229,12 @@ export default function VideoPlayer({ channel }) {
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         const levels = data.levels.map((l, i) => ({ id: i, label: l.height ? `${l.height}p` : `Level ${i + 1}` }))
         update({ qualityLevels: [{ id: -1, label: 'Auto' }, ...levels], loading: false })
-        video.play().catch(() => {})
+        video.play().catch((err) => {
+          // MediaSource not ready yet — wait for canplay then retry
+          if (err.name === 'AbortError' && !isCancelled) {
+            video.addEventListener('canplay', () => { if (!isCancelled) video.play().catch(() => {}) }, { once: true })
+          }
+        })
       })
       hls.on(Hls.Events.LEVEL_LOADED, (_, d) => update({ isLive: !!d.details?.live }))
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, { level }) => {
