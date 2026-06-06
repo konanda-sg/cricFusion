@@ -20,11 +20,17 @@ export default async function handler(req, res) {
       method: req.method,
       headers: {
         accept: req.headers['accept'] || '*/*',
-        'accept-language': 'en-US,en;q=0.9',
+        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
         'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        referer: 'https://www.fancode.com/',
-        origin: 'https://www.fancode.com',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'none',
+        'sec-fetch-storage-access': 'active',
+        dnt: '1',
       },
     })
   } catch {
