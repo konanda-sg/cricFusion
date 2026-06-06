@@ -72,6 +72,8 @@ export default function VideoPlayer({ channel }) {
     const video = videoRef.current
     if (!video || !channel?.url) return
 
+    let isCancelled = false
+    let hlsRetryTimer = null
     fallbackTriedRef.current = false
     update({ loading: true, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
     setStreamTracks([])
@@ -186,12 +188,14 @@ export default function VideoPlayer({ channel }) {
         try {
           await player.load(channel.url)
         } catch (err) {
+          if (isCancelled) return
           console.error('Shaka load failed', err)
           if (liveRef.current.playing || (liveRef.current.currentTime ?? 0) > 0) return
           if (channel.fallbackUrl && !fallbackTriedRef.current) {
             fallbackTriedRef.current = true
             try { await player.load(channel.fallbackUrl); return } catch {}
           }
+          if (isCancelled) return
           const msg =
             err.code === 6007  ? 'DRM key mismatch — check clearKey in channels.js.' :
             err.code === 1001  ? 'Network error — CDN unreachable.' :
@@ -202,6 +206,7 @@ export default function VideoPlayer({ channel }) {
       })()
 
       return () => {
+        isCancelled = true
         if (shakaRef.current) { shakaRef.current.destroy(); shakaRef.current = null }
       }
     }
@@ -233,11 +238,17 @@ export default function VideoPlayer({ channel }) {
             hls.startLoad()
           } else {
             update({ error: 'Stream error. Retrying…', loading: false })
-            setTimeout(() => { if (hlsRef.current) { hlsRef.current.startLoad(); update({ error: null, loading: true }) } }, 3000)
+            hlsRetryTimer = setTimeout(() => {
+              if (!isCancelled && hlsRef.current) { hlsRef.current.startLoad(); update({ error: null, loading: true }) }
+            }, 3000)
           }
         }
       })
-      return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null } }
+      return () => {
+        isCancelled = true
+        clearTimeout(hlsRetryTimer)
+        if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+      }
     }
 
     // ── Native fallback ──
