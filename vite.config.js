@@ -6,12 +6,22 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // Same-origin proxy: browser sends no Origin/sec-fetch-site headers,
-      // so FanCode CDN treats it as a direct request and doesn't 403.
       '/fc-cdn': {
-        target:      'https://in-mc-fblive.fancode.com',
+        target:       'https://in-mc-fblive.fancode.com',
         changeOrigin: true,
-        rewrite:     (path) => path.replace(/^\/fc-cdn/, ''),
+        rewrite:      (path) => path.replace(/^\/fc-cdn/, ''),
+        // Strip headers that reveal our origin — FanCode CDN 403s on them
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('referer')
+            proxyReq.removeHeader('origin')
+            proxyReq.removeHeader('sec-fetch-site')
+            proxyReq.removeHeader('sec-fetch-mode')
+            proxyReq.removeHeader('sec-fetch-dest')
+            proxyReq.removeHeader('sec-fetch-storage-access')
+            proxyReq.removeHeader('sec-fetch-user')
+          })
+        },
       },
     },
   },
