@@ -146,21 +146,10 @@ const FC_CATEGORY = {
   Boxing:      'boxing',
 }
 
-// Rewrite FanCode CDN URLs to the same-origin /fc-cdn proxy so browsers
-// don't attach Origin/sec-fetch-site: cross-site (which causes 403).
-function toFcProxy(url) {
-  if (!url) return url
-  try {
-    const u = new URL(url)
-    if (u.hostname === 'in-mc-fblive.fancode.com') return `/fc-cdn${u.pathname}${u.search}`
-  } catch {}
-  return url   // Google DAI and other hosts pass through unchanged
-}
-
 export function mapFanCodeChannel(match) {
-  const primary  = toFcProxy(match.adfree_url || match.dai_url)
+  const primary  = match.adfree_url || match.dai_url
   const fallback = (match.adfree_url && match.dai_url && match.adfree_url !== match.dai_url)
-                     ? toFcProxy(match.dai_url) : null
+                     ? match.dai_url : null
   return {
     id:           match.match_id,
     key:          `fc_${match.match_id}`,

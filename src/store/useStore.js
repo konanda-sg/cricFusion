@@ -78,7 +78,7 @@ export const useStore = create((set, get) => ({
       if (fanCodeResult.status === 'fulfilled') {
         const json = decode(fanCodeResult.value, swActive)
         fanCodeChannels = (json?.matches || [])
-          .filter((m) => m.status === 'LIVE' && m.adfree_url)
+          .filter((m) => m.status === 'LIVE' && (m.adfree_url || m.dai_url))
           .map(mapFanCodeChannel)
       }
 
