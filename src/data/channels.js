@@ -195,15 +195,6 @@ const SL_CATEGORY = {
 const SL_LANG = { ENG: 'English', HIN: 'Hindi', TAM: 'Tamil', TEL: 'Telugu', KAN: 'Kannada', MAR: 'Marathi' }
 
 function toSlProxy(url) {
-  if (!url) return url
-  try {
-    const u = new URL(url)
-    if (u.hostname === 'sonydaimenew.akamaized.net') return `/sl-cdn${u.pathname}${u.search}`
-    if (u.hostname === 'sonypartnersdaimenew.akamaized.net') {
-      const qs = u.search ? `${u.search}&host=p` : '?host=p'
-      return `/sl-cdn${u.pathname}${qs}`
-    }
-  } catch {}
   return url
 }
 
