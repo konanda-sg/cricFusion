@@ -15,16 +15,22 @@ export function usePullToRefresh(onRefresh) {
     if (!el) return
 
     const onTouchStart = (e) => {
-      if (el.scrollTop === 0) {
-        startYRef.current = e.touches[0].clientY
-        pullingRef.current = true
-      } else {
-        pullingRef.current = false
-      }
+      startYRef.current = e.touches[0].clientY
+      // Only arm if truly at the top (< 1 for iOS subpixel safety)
+      pullingRef.current = el.scrollTop < 1
     }
 
     const onTouchMove = (e) => {
       if (!pullingRef.current) return
+
+      // Live check — if the user scrolled down since touchstart, disarm
+      if (el.scrollTop > 0) {
+        pullingRef.current = false
+        pullDistRef.current = 0
+        setPullY(0)
+        return
+      }
+
       const delta = e.touches[0].clientY - startYRef.current
       if (delta <= 0) {
         pullingRef.current = false
