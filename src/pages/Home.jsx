@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 export default function Home() {
-  const { activeCategory, searchQuery, channels, channelsLoading, refreshChannels } = useStore()
-  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(refreshChannels)
+  const { activeCategory, searchQuery, channels, channelsLoading } = useStore()
+  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(() => window.location.reload())
 
   const filtered = useMemo(() => {
     let list = channels

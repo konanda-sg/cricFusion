@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 export default function Sports() {
-  const { activeCategory, setActiveCategory, channels, channelsLoading, refreshChannels } = useStore()
-  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(refreshChannels)
+  const { activeCategory, setActiveCategory, channels, channelsLoading } = useStore()
+  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(() => window.location.reload())
 
   // Ensure "all" is active when landing on Sports for the first time
   // (user may have had a category filtered on Home)
