@@ -11,6 +11,17 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => '/drmlive/sliv-live-events/main/sonyliv.json',
       },
+      '/sl-cdn': {
+        target: 'https://sonydaimenew.akamaized.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/sl-cdn/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('referer', 'https://www.sonyliv.com/')
+            proxyReq.setHeader('origin', 'https://www.sonyliv.com')
+          })
+        },
+      },
       '/api/cf-dynamic': {
         target: 'https://newwwwapiiiiii.vercel.app',
         changeOrigin: true,

@@ -1,6 +1,7 @@
 {
   "routes": [
     { "src": "/fc-cdn/(.*)", "dest": "/api/fc-cdn?path=$1" },
+    { "src": "/sl-cdn/(.*)", "dest": "/api/sl-cdn?path=$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

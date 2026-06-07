@@ -1,0 +1,72 @@
+// Vercel Edge Function — transparent proxy for Sony LIV / Akamai CDN.
+// Adds CORS headers and rewrites manifest content so HLS.js segment
+// fetches also go through this proxy. Injects the hdnea token into
+// relative variant/segment URLs so Akamai auth passes on every request.
+
+export const config = { runtime: 'edge' }
+
+function rewriteManifest(text, hdnea) {
+  return text.replace(/^(?!#|\s*$)(.+)$/gm, (line) => {
+    let url = line.trim()
+    // Rewrite absolute Akamai CDN URLs to go through this proxy
+    if (url.startsWith('https://sonydaimenew.akamaized.net/')) {
+      url = '/sl-cdn/' + url.slice('https://sonydaimenew.akamaized.net/'.length)
+    }
+    // Inject hdnea token into every URL that doesn't already have it
+    if (hdnea && !url.includes('hdnea=')) {
+      url += url.includes('?') ? `&hdnea=${hdnea}` : `?hdnea=${hdnea}`
+    }
+    return url
+  })
+}
+
+export default async function handler(req) {
+  const url = new URL(req.url)
+  const path = url.searchParams.get('path') || ''
+
+  const params = new URLSearchParams(url.search)
+  params.delete('path')
+  const hdnea = params.get('hdnea') || ''
+  const qs = params.toString()
+
+  const upstream = `https://sonydaimenew.akamaized.net/${path}${qs ? '?' + qs : ''}`
+
+  let upstreamResp
+  try {
+    upstreamResp = await fetch(upstream, {
+      method: req.method,
+      headers: {
+        accept: req.headers.get('accept') || '*/*',
+        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        referer: 'https://www.sonyliv.com/',
+        origin: 'https://www.sonyliv.com',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        dnt: '1',
+      },
+    })
+  } catch {
+    return new Response('Proxy error', { status: 502 })
+  }
+
+  const ct = upstreamResp.headers.get('content-type') || 'application/octet-stream'
+  const responseHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'no-cache, no-store',
+    'Content-Type': ct,
+  }
+
+  if (ct.includes('mpegurl') || path.endsWith('.m3u8')) {
+    let text = await upstreamResp.text()
+    text = rewriteManifest(text, hdnea)
+    return new Response(text, { status: upstreamResp.status, headers: responseHeaders })
+  }
+
+  return new Response(upstreamResp.body, { status: upstreamResp.status, headers: responseHeaders })
+}

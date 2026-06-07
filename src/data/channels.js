@@ -194,6 +194,15 @@ const SL_CATEGORY = {
 
 const SL_LANG = { ENG: 'English', HIN: 'Hindi', TAM: 'Tamil', TEL: 'Telugu', KAN: 'Kannada', MAR: 'Marathi' }
 
+function toSlProxy(url) {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    if (u.hostname === 'sonydaimenew.akamaized.net') return `/sl-cdn${u.pathname}${u.search}`
+  } catch {}
+  return url
+}
+
 function sonyLivLogo(channel) {
   const m = channel?.match(/Ten\s*(\d+)/i)
   if (m) return `SST${m[1]}`
@@ -204,7 +213,7 @@ function sonyLivLogo(channel) {
 
 export function mapSonyLivChannel(match, id) {
   const lang = match.audioLanguageName || 'ENG'
-  const url  = match.dai_url || match.pub_url || match.video_url
+  const url  = toSlProxy(match.dai_url || match.pub_url || match.video_url)
   return {
     id,
     key:          `sl_${match.contentId}`,
