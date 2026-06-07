@@ -278,7 +278,7 @@ export const STATIC_CHANNELS = [
 ]
 
 export const categories = [
-  { id: 'all',         label: 'All Sports',   icon: '🏆' },
+  { id: 'all',         label: 'Trending',     icon: '🔥' },
   { id: 'fancode',    label: 'FanCode',      icon: '⚡' },
   { id: 'sonyliv',    label: 'Sony LIV',     icon: '📺' },
   { id: 'cricket',    label: 'Cricket',      icon: '🏏' },

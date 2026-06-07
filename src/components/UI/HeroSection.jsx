@@ -1,148 +1,141 @@
-import { motion } from 'framer-motion'
+import { useState, useEffect, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Play, Users, Zap, Star } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 
-const particles = Array.from({ length: 20 }, (_, i) => ({
-  id: i,
-  x: Math.random() * 100,
-  y: Math.random() * 100,
-  size: Math.random() * 4 + 2,
-  duration: Math.random() * 4 + 3,
-  delay: Math.random() * 2,
-}))
+// Colour "vs" in the match title neon yellow
+function MatchTitle({ title }) {
+  const parts = title.split(/(\bvs\.?\b)/i)
+  return (
+    <h1
+      className="text-white font-black text-3xl md:text-5xl leading-tight"
+      style={{ fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase' }}
+    >
+      {parts.map((part, i) =>
+        /\bvs\.?\b/i.test(part)
+          ? <span key={i} style={{ color: '#c8ff00' }}>{part}</span>
+          : part
+      )}
+    </h1>
+  )
+}
+
+const INTERVAL_MS = 5000
 
 export default function HeroSection() {
-  const navigate = useNavigate()
-  const channels = useStore((s) => s.channels)
-  const match = channels.find((c) => c.isLive) ?? channels[0]
+  const navigate    = useNavigate()
+  const channels    = useStore((s) => s.channels)
+  const liveList    = channels.filter((c) => c.isLive).slice(0, 6)
+  const [idx, setIdx]     = useState(0)
+  const [imgFailed, setImgFailed] = useState(false)
+
+  const total = liveList.length
+  const match = liveList[idx] ?? liveList[0]
+
+  // Reset image-failed flag whenever slide changes
+  useEffect(() => { setImgFailed(false) }, [idx])
+
+  // Auto-advance
+  const next = useCallback(() => setIdx((i) => (i + 1) % total), [total])
+  useEffect(() => {
+    if (total <= 1) return
+    const t = setInterval(next, INTERVAL_MS)
+    return () => clearInterval(t)
+  }, [total, next])
+
   if (!match) return null
 
   return (
-    <div className="relative overflow-hidden rounded-2xl md:rounded-3xl mb-8" style={{ minHeight: 320 }}>
-      {/* Background image */}
-      <div className="absolute inset-0">
-        <img
-          src={match.thumbnail}
-          alt={match.currentMatch}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-900 via-dark-900/80 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-900 via-transparent to-dark-900/40" />
-      </div>
+    <div className="relative overflow-hidden bg-black" style={{ height: 'clamp(340px, 58vw, 520px)' }}>
 
-      {/* Animated particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {particles.map((p) => (
-          <motion.div
-            key={p.id}
-            className="absolute rounded-full bg-brand-500/20"
-            style={{
-              left: `${p.x}%`,
-              top: `${p.y}%`,
-              width: p.size,
-              height: p.size,
-            }}
-            animate={{
-              y: [0, -30, 0],
-              opacity: [0.2, 0.6, 0.2],
-            }}
-            transition={{
-              duration: p.duration,
-              delay: p.delay,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Animated gradient orbs */}
-      <div className="absolute top-1/2 right-1/4 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl animate-float pointer-events-none" />
-      <div className="absolute -bottom-10 right-10 w-48 h-48 bg-red-500/10 rounded-full blur-3xl animate-float pointer-events-none" style={{ animationDelay: '1.5s' }} />
+      {/* Background image with crossfade */}
+      <AnimatePresence mode="sync">
+        <motion.div
+          key={match.id}
+          className="absolute inset-0"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.55 }}
+        >
+          {!imgFailed && match.thumbnail ? (
+            <img
+              src={match.thumbnail}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => setImgFailed(true)}
+            />
+          ) : (
+            <div className="w-full h-full bg-dark-800" />
+          )}
+          {/* Gradient overlays */}
+          <div className="absolute inset-0"
+            style={{ background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.25) 100%)' }} />
+          <div className="absolute inset-0"
+            style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.6) 0%, transparent 60%)' }} />
+        </motion.div>
+      </AnimatePresence>
 
       {/* Content */}
-      <div className="relative z-10 px-6 py-8 md:px-10 md:py-12 flex flex-col justify-end h-full min-h-[320px]">
-        <div className="max-w-xl space-y-4">
-          {/* Live badge */}
+      <div className="absolute inset-0 flex flex-col justify-end px-5 pb-7 md:px-10 md:pb-10">
+        <AnimatePresence mode="wait">
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3"
-          >
-            <div className="flex items-center gap-1.5 bg-red-600 text-white text-xs font-black px-3 py-1 rounded-full shadow-lg shadow-red-600/30">
-              <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-              LIVE NOW
-            </div>
-            <div className="flex items-center gap-1 text-white/60 text-sm">
-              <Users size={14} />
-              <span>{match.viewers} watching</span>
-            </div>
-          </motion.div>
-
-          {/* Title */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
+            key={match.id}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-2xl md:text-4xl font-black text-white leading-tight"
-            style={{ fontFamily: 'Oswald, sans-serif' }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.38 }}
+            className="space-y-3 max-w-lg"
           >
-            {match.currentMatch}
-          </motion.h1>
-
-          {/* Score */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center gap-2"
-          >
-            <div className="glass text-white text-sm font-bold px-3 py-1.5 rounded-lg">
-              {match.score}
+            {/* LIVE badge */}
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+              <span className="text-white font-bold text-xs tracking-[0.2em] uppercase">Live</span>
+              {match.viewers && (
+                <span className="text-white/40 text-xs ml-1">· {match.viewers} watching</span>
+              )}
             </div>
-            <div className="flex items-center gap-1 text-brand-400 text-xs">
-              <Zap size={12} />
-              <span>{match.badge}</span>
-            </div>
-          </motion.div>
 
-          {/* Description */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-white/60 text-sm line-clamp-2"
-          >
-            {match.description}
-          </motion.p>
+            {/* Match title */}
+            <MatchTitle title={match.currentMatch} />
 
-          {/* CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="flex items-center gap-3"
-          >
+            {/* Score / description */}
+            {(match.score || match.description) && (
+              <p className="text-white/60 text-sm leading-relaxed line-clamp-2">
+                {match.score || match.description}
+              </p>
+            )}
+
+            {/* CTA */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => navigate(`/watch/${match.id}`)}
-              className="flex items-center gap-2 gradient-brand text-white font-bold px-6 py-3 rounded-xl shadow-xl shadow-brand-500/30 hover:shadow-brand-500/50 transition-shadow"
+              className="flex items-center justify-center gap-2 text-white font-semibold text-sm px-8 py-3 rounded-full border border-white/20 transition-colors"
+              style={{ background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)', minWidth: 200 }}
             >
-              <Play size={18} className="fill-white" />
-              Watch Live
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-2 glass text-white font-medium px-5 py-3 rounded-xl hover:bg-white/10 transition-colors"
-            >
-              <Star size={16} />
-              Favourite
+              <Play size={16} className="fill-white flex-shrink-0" />
+              Watch Now
             </motion.button>
           </motion.div>
-        </div>
+        </AnimatePresence>
+
+        {/* Pagination dots */}
+        {total > 1 && (
+          <div className="flex items-center gap-2 mt-5">
+            {liveList.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIdx(i)}
+                className="h-1.5 rounded-full transition-all duration-300"
+                style={{
+                  width: i === idx ? 24 : 16,
+                  background: i === idx ? '#c8ff00' : 'rgba(255,255,255,0.3)',
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

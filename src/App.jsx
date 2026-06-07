@@ -2,13 +2,16 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useStore } from './store/useStore'
 import Header from './components/Layout/Header'
+import BottomNav from './components/Layout/BottomNav'
 import Home from './pages/Home'
+import Search from './pages/Search'
+import Sports from './pages/Sports'
+import Account from './pages/Account'
 import Watch from './pages/Watch'
 
 export default function App() {
   const { darkMode, loadChannels } = useStore()
 
-  // Apply dark/light class
   useEffect(() => {
     const html = document.documentElement
     html.classList.toggle('dark', darkMode)
@@ -20,11 +23,10 @@ export default function App() {
       if ('serviceWorker' in navigator) {
         try {
           await navigator.serviceWorker.ready
-          // clients.claim() fires after activate; wait for controller to be set
           if (!navigator.serviceWorker.controller) {
             await Promise.race([
               new Promise(r => navigator.serviceWorker.addEventListener('controllerchange', r, { once: true })),
-              new Promise(r => setTimeout(r, 800)),  // don't block more than 800 ms
+              new Promise(r => setTimeout(r, 800)),
             ])
           }
         } catch {}
@@ -36,14 +38,18 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className={`flex flex-col min-h-screen ${darkMode ? 'bg-dark-900 text-white' : 'bg-slate-100 text-slate-900'}`}>
+      <div className="flex flex-col min-h-screen min-h-dvh bg-black text-white">
         <Header />
-        <div className="flex flex-1 overflow-hidden min-h-0" style={{ height: 'calc(100vh - 64px)' }}>
+        <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100dvh - 56px)' }}>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/"        element={<Home />} />
+            <Route path="/search"  element={<Search />} />
+            <Route path="/sports"  element={<Sports />} />
+            <Route path="/account" element={<Account />} />
             <Route path="/watch/:id" element={<Watch />} />
           </Routes>
         </div>
+        <BottomNav />
       </div>
     </BrowserRouter>
   )
