@@ -18,6 +18,7 @@ export default function Watch() {
   const [showSharePanel, setShowSharePanel] = useState(false)
   const [copied, setCopied] = useState(false)
   const sharePanelRef = useRef(null)
+  const playerRef = useRef(null)
 
   const channel = channels.find((c) => c.id === Number(id))
   const related = channels.filter((c) => c.id !== Number(id) && c.isLive).slice(0, 6)
@@ -27,6 +28,15 @@ export default function Watch() {
     if (channel) setCurrentChannel(channel)
     return () => setCurrentChannel(null)
   }, [channel])
+
+  // On mobile, scroll the player into view after the route transition settles
+  useEffect(() => {
+    if (!channel || window.innerWidth >= 768) return
+    const t = setTimeout(() => {
+      playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 200)
+    return () => clearTimeout(t)
+  }, [channel?.id])
 
   // Close panel when clicking outside
   useEffect(() => {
@@ -103,6 +113,7 @@ export default function Watch() {
 
           {/* Player */}
           <motion.div
+            ref={playerRef}
             key={channel.id}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}

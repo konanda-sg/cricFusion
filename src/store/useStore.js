@@ -29,10 +29,46 @@ function decode(text, swActive) {
   }
 }
 
+function ls(key, fallback) {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : v } catch { return fallback }
+}
+
 export const useStore = create((set, get) => ({
   // ── Theme ──────────────────────────────────────────────────────────────
-  darkMode: true,
-  toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+  darkMode: ls('cf_darkMode', 'true') !== 'false',
+  toggleDarkMode: () => set((s) => {
+    const next = !s.darkMode
+    try { localStorage.setItem('cf_darkMode', String(next)) } catch {}
+    return { darkMode: next }
+  }),
+
+  // ── Notifications ──────────────────────────────────────────────────────
+  notificationsEnabled: ls('cf_notifications', '0') === '1',
+  toggleNotifications: async () => {
+    const { notificationsEnabled } = get()
+    if (notificationsEnabled) {
+      try { localStorage.setItem('cf_notifications', '0') } catch {}
+      set({ notificationsEnabled: false })
+      return
+    }
+    if (!('Notification' in window)) return
+    const perm = await Notification.requestPermission()
+    if (perm === 'granted') {
+      try { localStorage.setItem('cf_notifications', '1') } catch {}
+      set({ notificationsEnabled: true })
+      new Notification('CricFusion', {
+        body: "You'll be notified when streams go live.",
+        icon: '/favicon.svg',
+      })
+    }
+  },
+
+  // ── Stream quality preference ──────────────────────────────────────────
+  preferredQuality: ls('cf_quality', 'Auto'),
+  setPreferredQuality: (q) => {
+    try { localStorage.setItem('cf_quality', q) } catch {}
+    set({ preferredQuality: q })
+  },
 
   // ── Channels (loaded from API) ─────────────────────────────────────────
   channels: STATIC_CHANNELS,         // start with static; API channels prepended on load

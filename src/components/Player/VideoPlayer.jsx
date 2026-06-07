@@ -6,6 +6,7 @@ import PlayerControls from './PlayerControls'
 import SettingsMenu from './SettingsMenu'
 import SeekIndicator from './SeekIndicator'
 import SubtitleOverlay from './SubtitleOverlay'
+import { useStore } from '../../store/useStore'
 
 const LANG_NAMES = { en: 'English', hi: 'Hindi', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', mr: 'Marathi', pa: 'Punjabi', bn: 'Bengali', und: 'Default', mul: 'Multi' }
 function formatLangLabel(code) {
@@ -35,6 +36,9 @@ export default function VideoPlayer({ channel }) {
   const subtitleTrackClean = useRef(null)   // cleanup fn for active TextTrack listener
   const subClearTimer      = useRef(null)   // clears subtitle text after silence gap
   const fallbackTriedRef   = useRef(false)  // true once fallbackUrl has been attempted
+  const preferredQualityApplied = useRef(false)
+
+  const { preferredQuality } = useStore()
 
   const [streamTracks, setStreamTracks] = useState([])   // detected text tracks from stream
 
@@ -84,6 +88,7 @@ export default function VideoPlayer({ channel }) {
     let isCancelled = false
     let hlsRetryTimer = null
     fallbackTriedRef.current = false
+    preferredQualityApplied.current = false
     update({ loading: true, playing: false, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '', audioTracks: [], audioTrack: null })
     setStreamTracks([])
 
@@ -594,6 +599,7 @@ export default function VideoPlayer({ channel }) {
       return
     }
     if (e.touches.length === 1) {
+      if (!liveRef.current.fullscreen) return  // brightness/volume swipe only in fullscreen
       const t = e.touches[0]
       const rect = containerRef.current?.getBoundingClientRect()
       if (!rect) return
@@ -675,6 +681,15 @@ export default function VideoPlayer({ channel }) {
       update({ quality: levelId === -1 ? 'Auto' : stored?.label ?? 'Auto', showQualityMenu: false })
     }
   }, [])
+
+  // Apply the global quality preference the first time levels are available for a stream
+  useEffect(() => {
+    if (!state.qualityLevels.length || preferredQualityApplied.current) return
+    preferredQualityApplied.current = true
+    if (preferredQuality === 'Auto') return
+    const match = state.qualityLevels.find((l) => l.label === preferredQuality)
+    if (match) setQuality(match.id)
+  }, [state.qualityLevels, preferredQuality, setQuality])
 
   const setAudioTrack = useCallback((id) => {
     if (hlsRef.current) {
