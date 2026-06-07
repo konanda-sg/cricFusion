@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft, Users, Globe, Zap, Share2,
+  ArrowLeft, Users, Globe, Zap, Share2, Link2, Check,
   Heart, ChevronRight, Radio, Star, Tv2
 } from 'lucide-react'
 import VideoPlayer from '../components/Player/VideoPlayer'
@@ -15,7 +15,9 @@ export default function Watch() {
   const navigate = useNavigate()
   const { setCurrentChannel, channels } = useStore()
   const [liked, setLiked] = useState(false)
-  const [shareMsg, setShareMsg] = useState(false)
+  const [showSharePanel, setShowSharePanel] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const sharePanelRef = useRef(null)
 
   const channel = channels.find((c) => c.id === Number(id))
   const related = channels.filter((c) => c.id !== Number(id) && c.isLive).slice(0, 6)
@@ -26,11 +28,43 @@ export default function Watch() {
     return () => setCurrentChannel(null)
   }, [channel])
 
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href).catch(() => {})
-    setShareMsg(true)
-    setTimeout(() => setShareMsg(false), 2000)
-  }
+  // Close panel when clicking outside
+  useEffect(() => {
+    if (!showSharePanel) return
+    const handler = (e) => {
+      if (sharePanelRef.current && !sharePanelRef.current.contains(e.target)) {
+        setShowSharePanel(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showSharePanel])
+
+  const shareUrl  = window.location.href
+  const shareText = channel ? `Watch ${channel.currentMatch} LIVE on CricFusion!` : 'Watch live cricket on CricFusion!'
+
+  const handleShare = useCallback(async () => {
+    // Mobile: use native OS share sheet
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: shareText, url: shareUrl })
+      } catch (_) {}
+      return
+    }
+    // Desktop: toggle panel
+    setShowSharePanel((v) => !v)
+  }, [shareText, shareUrl])
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard?.writeText(shareUrl).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [shareUrl])
+
+  const openShare = useCallback((href) => {
+    window.open(href, '_blank', 'noopener,noreferrer,width=600,height=480')
+    setShowSharePanel(false)
+  }, [])
 
   if (!channel) {
     return (
@@ -142,22 +176,71 @@ export default function Watch() {
                   <span className="hidden sm:inline">{liked ? 'Liked' : 'Like'}</span>
                 </motion.button>
 
-                <div className="relative">
+                <div className="relative" ref={sharePanelRef}>
                   <motion.button
                     whileTap={{ scale: 0.92 }}
                     onClick={handleShare}
-                    className="flex items-center gap-1.5 glass text-white/60 hover:text-white px-3 py-2 rounded-xl text-sm font-semibold border border-white/[0.07] transition-colors"
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                      showSharePanel
+                        ? 'bg-brand-500/20 text-brand-300 border-brand-500/40'
+                        : 'glass text-white/60 hover:text-white border-white/[0.07]'
+                    }`}
                   >
                     <Share2 size={15} />
                     <span className="hidden sm:inline">Share</span>
                   </motion.button>
+
                   <AnimatePresence>
-                    {shareMsg && (
+                    {showSharePanel && (
                       <motion.div
-                        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="absolute -top-9 left-1/2 -translate-x-1/2 bg-dark-700 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap border border-white/10"
+                        initial={{ opacity: 0, scale: 0.92, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.92, y: 8 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-11 z-50 glass-dark rounded-2xl shadow-2xl border border-white/10 overflow-hidden min-w-[210px]"
                       >
-                        Link copied!
+                        <p className="px-4 pt-3 pb-2 text-white/40 text-[10px] font-semibold uppercase tracking-wider">Share this match</p>
+
+                        {/* Copy link */}
+                        <button
+                          onClick={handleCopy}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 transition-colors"
+                        >
+                          {copied
+                            ? <Check size={16} className="text-green-400 flex-shrink-0" />
+                            : <Link2 size={16} className="text-white/50 flex-shrink-0" />
+                          }
+                          <span className="text-white text-sm">{copied ? 'Link copied!' : 'Copy link'}</span>
+                        </button>
+
+                        <div className="h-px bg-white/[0.06] mx-4" />
+
+                        {/* WhatsApp */}
+                        <button
+                          onClick={() => openShare(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 transition-colors"
+                        >
+                          <span className="w-4 h-4 flex-shrink-0 text-[15px] leading-none">💬</span>
+                          <span className="text-white text-sm">WhatsApp</span>
+                        </button>
+
+                        {/* Twitter / X */}
+                        <button
+                          onClick={() => openShare(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 transition-colors"
+                        >
+                          <span className="w-4 h-4 flex-shrink-0 font-black text-white/70 text-[13px]">𝕏</span>
+                          <span className="text-white text-sm">Twitter / X</span>
+                        </button>
+
+                        {/* Telegram */}
+                        <button
+                          onClick={() => openShare(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)}
+                          className="w-full flex items-center gap-3 px-4 pb-3 pt-2.5 hover:bg-white/10 transition-colors"
+                        >
+                          <span className="w-4 h-4 flex-shrink-0 text-[15px] leading-none">✈️</span>
+                          <span className="text-white text-sm">Telegram</span>
+                        </button>
                       </motion.div>
                     )}
                   </AnimatePresence>
