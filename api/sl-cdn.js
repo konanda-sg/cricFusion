@@ -52,24 +52,25 @@ export default async function handler(req, res) {
 
   const upstream = `https://${akamaiHost}/${path}${rawQs ? '?' + rawQs : ''}`
 
-  // Forward the browser's headers verbatim so Akamai's WAF sees a real browser request.
-  // Do NOT forward host/connection (hop-by-hop) or origin (would spoof).
-  const PASS = [
-    'accept', 'accept-language', 'accept-encoding',
-    'user-agent', 'dnt', 'priority',
-    'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform',
-    'sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site',
-    'referer', 'range',
-  ]
-  const fwdHeaders = {}
-  for (const h of PASS) {
-    const v = req.headers[h]
-    if (v) fwdHeaders[h] = v
-  }
-
   let upstreamResp
   try {
-    upstreamResp = await fetch(upstream, { headers: fwdHeaders })
+    upstreamResp = await fetch(upstream, {
+      headers: {
+        'accept': '*/*',
+        'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+        'dnt': '1',
+        'priority': 'u=1, i',
+        'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'none',
+        'sec-fetch-storage-access': 'active',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        ...(req.headers['range'] && { 'range': req.headers['range'] }),
+      },
+    })
   } catch (err) {
     res.statusCode = 502
     return res.end('Proxy error: ' + err.message)
