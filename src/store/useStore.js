@@ -1,13 +1,14 @@
 import { create } from 'zustand'
 import {
   CHANNEL_ORDER, STATIC_CHANNELS, mapApiChannel,
-  DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel,
+  DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel, mapSonyLivChannel,
 } from '../data/channels'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 
 const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
 const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?id=...
 const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-events
+const SONYLIV_PROXY = '/cf-sonyliv'   // SW → github drmlive/sliv-live-events
 
 // SW base64-encodes responses; decode back to JSON string
 function decode(text, swActive) {
@@ -46,15 +47,17 @@ export const useStore = create((set, get) => ({
     const swActive  = !!(navigator.serviceWorker?.controller)
     const batchUrl  = swActive ? PROXY : 'https://jtvv.pages.dev/channels.json'
     const fanCodeUrl = swActive ? FANCODE_PROXY : 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json'
+    const sonyLivUrl = swActive ? SONYLIV_PROXY : 'https://raw.githubusercontent.com/drmlive/sliv-live-events/main/sonyliv.json'
     const dynUrl    = (id) => swActive
       ? `${DYNAMIC_PROXY}?id=${id}`
       : `https://newwwwapiiiiii.vercel.app/main?id=${id}`
 
     try {
       // Fire all APIs in parallel — SW proxies so real URLs stay hidden
-      const [batchResult, fanCodeResult, ...dynamicResults] = await Promise.allSettled([
+      const [batchResult, fanCodeResult, sonyLivResult, ...dynamicResults] = await Promise.allSettled([
         fetch(batchUrl).then((r) => r.text()),
         fetch(fanCodeUrl).then((r) => r.text()),
+        fetch(sonyLivUrl).then((r) => r.text()),
         ...DYNAMIC_CHANNEL_IDS.map((id) => fetch(dynUrl(id)).then((r) => r.text())),
       ])
 
@@ -82,6 +85,15 @@ export const useStore = create((set, get) => ({
           .map(mapFanCodeChannel)
       }
 
+      // ── Sony LIV live events ───────────────────────────────────────────
+      let sonyLivChannels = []
+      if (sonyLivResult.status === 'fulfilled') {
+        const json = decode(sonyLivResult.value, swActive)
+        sonyLivChannels = (Array.isArray(json) ? json : [])
+          .filter((m) => m.isLive && (m.dai_url || m.pub_url || m.video_url))
+          .map((m, i) => mapSonyLivChannel(m, 300 + i + 1))
+      }
+
       // ── Per-channel dynamic channels ───────────────────────────────────
       const dynamicChannels = dynamicResults
         .map((result, i) => {
@@ -93,7 +105,7 @@ export const useStore = create((set, get) => ({
         .filter(Boolean)
 
       set({
-        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fanCodeChannels],
+        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fanCodeChannels, ...sonyLivChannels],
         channelsLoading: false,
         lastFetched: Date.now(),
       })

@@ -5,6 +5,7 @@
 const BATCH_URL    = 'https://jtvv.pages.dev/channels.json'
 const DYNAMIC_URL  = '/api/cf-dynamic'
 const FANCODE_URL  = 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json'
+const SONYLIV_URL  = 'https://raw.githubusercontent.com/drmlive/sliv-live-events/main/sonyliv.json'
 
 function b64(text) {
   return btoa(unescape(encodeURIComponent(text)))
@@ -41,6 +42,17 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/cf-fancode') {
     event.respondWith(
       fetch(FANCODE_URL, { cache: 'no-store', credentials: 'omit' })
+        .then((r) => r.text())
+        .then(makeResponse)
+        .catch(() => new Response('error', { status: 502 }))
+    )
+    return
+  }
+
+  // ── Sony LIV live events ──────────────────────────────────────────────────
+  if (url.pathname === '/cf-sonyliv') {
+    event.respondWith(
+      fetch(SONYLIV_URL, { cache: 'no-store', credentials: 'omit' })
         .then((r) => r.text())
         .then(makeResponse)
         .catch(() => new Response('error', { status: 502 }))

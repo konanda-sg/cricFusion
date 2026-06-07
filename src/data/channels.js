@@ -181,6 +181,50 @@ export function mapFanCodeChannel(match) {
   }
 }
 
+// ── Sony LIV live events (drmlive/sliv-live-events) ─────────────────────────
+const SL_CATEGORY = {
+  Cricket:       'cricket',
+  Football:      'football',
+  Tennis:        'tennis',
+  Basketball:    'basketball',
+  'Fight Sports': 'boxing',
+  MotoGP:        'formula1',
+  'Formula 1':   'formula1',
+}
+
+const SL_LANG = { ENG: 'English', HIN: 'Hindi', TAM: 'Tamil', TEL: 'Telugu', KAN: 'Kannada', MAR: 'Marathi' }
+
+function sonyLivLogo(channel) {
+  const m = channel?.match(/Ten\s*(\d+)/i)
+  if (m) return `SST${m[1]}`
+  const m2 = channel?.match(/(?:Sports|LIV)\s*(\d+)/i)
+  if (m2) return `SL${m2[1]}`
+  return (channel || 'SLV').slice(0, 4).toUpperCase()
+}
+
+export function mapSonyLivChannel(match, id) {
+  const lang = match.audioLanguageName || 'ENG'
+  const url  = match.dai_url || match.pub_url || match.video_url
+  return {
+    id,
+    key:          `sl_${match.contentId}`,
+    name:         match.event_name,
+    category:     SL_CATEGORY[match.event_category] || 'multi',
+    currentMatch: match.match_name,
+    thumbnail:    match.src,
+    logo:         sonyLivLogo(match.broadcast_channel),
+    isLive:       !!match.isLive,
+    viewers:      '—',
+    badge:        'HD',
+    language:     SL_LANG[lang] || lang,
+    description:  `${match.event_name} — ${match.broadcast_channel || 'Sony LIV'}`,
+    score:        null,
+    url,
+    clearKey:     null,
+    quality:      ['Auto', '1080p', '720p', '480p'],
+  }
+}
+
 // ── Static channels (fixed URLs, not in any API) ─────────────────────────────
 export const STATIC_CHANNELS = [
   {
@@ -227,6 +271,7 @@ export const STATIC_CHANNELS = [
 export const categories = [
   { id: 'all',         label: 'All Sports',   icon: '🏆' },
   { id: 'fancode',    label: 'FanCode',      icon: '⚡' },
+  { id: 'sonyliv',    label: 'Sony LIV',     icon: '📺' },
   { id: 'cricket',    label: 'Cricket',      icon: '🏏' },
   { id: 'football',   label: 'Football',     icon: '⚽' },
   { id: 'tennis',     label: 'Tennis',       icon: '🎾' },
