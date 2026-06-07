@@ -40,6 +40,11 @@ export default async function handler(req) {
 
   const upstream = `https://sonydaimenew.akamaized.net/${path}${rawQs ? '?' + rawQs : ''}`
 
+  console.log('[sl-cdn] req.url:', req.url)
+  console.log('[sl-cdn] path:', path)
+  console.log('[sl-cdn] rawQs:', rawQs)
+  console.log('[sl-cdn] upstream:', upstream)
+
   let upstreamResp
   try {
     upstreamResp = await fetch(upstream, {
@@ -60,10 +65,12 @@ export default async function handler(req) {
         dnt: '1',
       },
     })
-  } catch {
+  } catch (err) {
+    console.log('[sl-cdn] fetch error:', err?.message)
     return new Response('Proxy error', { status: 502 })
   }
 
+  console.log('[sl-cdn] upstream status:', upstreamResp.status)
   const ct = upstreamResp.headers.get('content-type') || 'application/octet-stream'
   const responseHeaders = {
     'Access-Control-Allow-Origin': '*',
