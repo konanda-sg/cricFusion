@@ -9,6 +9,9 @@ function proxyAkamaiUrl(url, hdnea) {
   let out = url
   if (out.startsWith('https://sonydaimenew.akamaized.net/')) {
     out = '/sl-cdn/' + out.slice('https://sonydaimenew.akamaized.net/'.length)
+  } else if (out.startsWith('https://sonypartnersdaimenew.akamaized.net/')) {
+    out = '/sl-cdn/' + out.slice('https://sonypartnersdaimenew.akamaized.net/'.length)
+    out += out.includes('?') ? '&host=p' : '?host=p'
   }
   if (hdnea && !out.includes('hdnea=')) {
     out += out.includes('?') ? `&hdnea=${hdnea}` : `?hdnea=${hdnea}`
@@ -32,13 +35,18 @@ export default async function handler(req) {
   const url = new URL(req.url)
   const path = url.searchParams.get('path') || ''
   const hdnea = url.searchParams.get('hdnea') || ''
+  const akamaiHost = url.searchParams.get('host') === 'p'
+    ? 'sonypartnersdaimenew.akamaized.net'
+    : 'sonydaimenew.akamaized.net'
 
-  // Strip only 'path=' from the raw query string and pass everything else to Akamai
+  // Strip 'path=' and 'host=' from the raw query string and pass everything else to Akamai
   // verbatim. Avoid URLSearchParams.toString() — it re-encodes '=' to '%3D' inside
   // token values (hdnea, hdntl) and breaks Akamai's signature validation.
-  const rawQs = url.search.slice(1).split('&').filter((p) => !p.startsWith('path=')).join('&')
+  const rawQs = url.search.slice(1).split('&')
+    .filter((p) => !p.startsWith('path=') && !p.startsWith('host='))
+    .join('&')
 
-  const upstream = `https://sonydaimenew.akamaized.net/${path}${rawQs ? '?' + rawQs : ''}`
+  const upstream = `https://${akamaiHost}/${path}${rawQs ? '?' + rawQs : ''}`
 
   console.log('[sl-cdn] req.url:', req.url)
   console.log('[sl-cdn] path:', path)

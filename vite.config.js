@@ -3,10 +3,15 @@ import react from '@vitejs/plugin-react'
 
 const AKAMAI = 'sonydaimenew.akamaized.net'
 
+const SL_PARTNERS = 'sonypartnersdaimenew.akamaized.net'
+
 function slProxyUrl(url, hdnea) {
   let out = url
   if (out.startsWith(`https://${AKAMAI}/`)) {
     out = '/sl-cdn/' + out.slice(`https://${AKAMAI}/`.length)
+  } else if (out.startsWith(`https://${SL_PARTNERS}/`)) {
+    out = '/sl-cdn/' + out.slice(`https://${SL_PARTNERS}/`.length)
+    out += out.includes('?') ? '&host=p' : '?host=p'
   }
   if (hdnea && !out.includes('hdnea=')) {
     out += out.includes('?') ? `&hdnea=${hdnea}` : `?hdnea=${hdnea}`
@@ -37,8 +42,15 @@ function sonyLivDevProxy() {
           return res.end()
         }
 
-        const pathAndQuery = req.url.slice('/sl-cdn'.length)
-        const upstream = `https://${AKAMAI}${pathAndQuery}`
+        const slicedUrl = req.url.slice('/sl-cdn'.length)
+        const qIdx = slicedUrl.indexOf('?')
+        const slPath = qIdx >= 0 ? slicedUrl.slice(0, qIdx) : slicedUrl
+        const rawQuery = qIdx >= 0 ? slicedUrl.slice(qIdx + 1) : ''
+        const parts = rawQuery.split('&')
+        const isPartners = parts.some((p) => p === 'host=p')
+        const akamaiHost = isPartners ? SL_PARTNERS : AKAMAI
+        const cleanQuery = parts.filter((p) => p !== 'host=p').join('&')
+        const upstream = `https://${akamaiHost}${slPath}${cleanQuery ? '?' + cleanQuery : ''}`
 
         let hdnea = ''
         try { hdnea = new URL(upstream).searchParams.get('hdnea') || '' } catch {}
@@ -60,7 +72,7 @@ function sonyLivDevProxy() {
           res.setHeader('Content-Type', ct)
           res.statusCode = r.status
 
-          if (ct.includes('mpegurl') || /\.m3u8/.test(pathAndQuery)) {
+          if (ct.includes('mpegurl') || /\.m3u8/.test(slPath)) {
             const text = rewriteSlM3u8(await r.text(), hdnea)
             return res.end(text)
           }
