@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 
+const ENABLED   = false   // set true to re-enable pull-to-refresh
 const THRESHOLD = 110
 
 export function usePullToRefresh(onRefresh) {
@@ -13,6 +14,8 @@ export function usePullToRefresh(onRefresh) {
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+
+    if (!ENABLED) return
 
     const onTouchStart = (e) => {
       startYRef.current = e.touches[0].clientY
