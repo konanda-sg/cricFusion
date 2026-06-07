@@ -57,12 +57,12 @@ export default async function handler(req) {
         'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
-        referer: 'https://www.sonyliv.com/',
-        origin: 'https://www.sonyliv.com',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-site',
+        'sec-fetch-site': 'none',
+        'sec-fetch-storage-access': 'active',
         dnt: '1',
+        priority: 'u=1, i',
       },
     })
   } catch (err) {
