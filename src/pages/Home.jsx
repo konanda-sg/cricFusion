@@ -3,10 +3,13 @@ import { motion } from 'framer-motion'
 import HeroSection from '../components/UI/HeroSection'
 import CategoryTabs from '../components/UI/CategoryTabs'
 import ChannelCard from '../components/UI/ChannelCard'
+import PullIndicator from '../components/UI/PullIndicator'
 import { useStore } from '../store/useStore'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 export default function Home() {
-  const { activeCategory, searchQuery, channels, channelsLoading } = useStore()
+  const { activeCategory, searchQuery, channels, channelsLoading, refreshChannels } = useStore()
+  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(refreshChannels)
 
   const filtered = useMemo(() => {
     let list = channels
@@ -30,7 +33,10 @@ export default function Home() {
   }, [activeCategory, searchQuery, channels])
 
   return (
-    <main className="flex-1 overflow-y-auto bg-black pb-safe no-scrollbar">
+    <main ref={containerRef} className="flex-1 overflow-y-auto bg-black pb-safe no-scrollbar">
+
+      {/* Pull-to-refresh indicator */}
+      <PullIndicator pullY={pullY} refreshing={refreshing} threshold={threshold} />
 
       {/* Hero carousel — full bleed, no horizontal padding */}
       <HeroSection />

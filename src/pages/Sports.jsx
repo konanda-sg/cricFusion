@@ -3,10 +3,13 @@ import { motion } from 'framer-motion'
 import { Trophy } from 'lucide-react'
 import CategoryTabs from '../components/UI/CategoryTabs'
 import ChannelCard from '../components/UI/ChannelCard'
+import PullIndicator from '../components/UI/PullIndicator'
 import { useStore } from '../store/useStore'
+import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 export default function Sports() {
-  const { activeCategory, setActiveCategory, channels, channelsLoading } = useStore()
+  const { activeCategory, setActiveCategory, channels, channelsLoading, refreshChannels } = useStore()
+  const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(refreshChannels)
 
   // Ensure "all" is active when landing on Sports for the first time
   // (user may have had a category filtered on Home)
@@ -20,7 +23,10 @@ export default function Sports() {
   const liveCount = filtered.filter((c) => c.isLive).length
 
   return (
-    <main className="flex-1 overflow-y-auto bg-black pb-safe no-scrollbar">
+    <main ref={containerRef} className="flex-1 overflow-y-auto bg-black pb-safe no-scrollbar">
+
+      {/* Pull-to-refresh indicator */}
+      <PullIndicator pullY={pullY} refreshing={refreshing} threshold={threshold} />
 
       {/* Header */}
       <div className="px-4 md:px-6 pt-5 pb-1 flex items-center gap-3">
