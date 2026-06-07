@@ -10,11 +10,20 @@ const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?i
 const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-events
 const SONYLIV_PROXY = '/cf-sonyliv'   // SW → github drmlive/sliv-live-events
 
-// SW base64-encodes responses; decode back to JSON string
+// SW base64-encodes responses; decode back to JSON string.
+// Falls back to plain JSON when SW is active but an old SW version fell
+// through to the Vite proxy (which returns raw JSON, not base64).
 function decode(text, swActive) {
+  if (!text || text === 'error') return null
   try {
-    const raw = swActive ? decodeURIComponent(escape(atob(text.trim()))) : text
-    return JSON.parse(raw)
+    if (swActive) {
+      try {
+        return JSON.parse(decodeURIComponent(escape(atob(text.trim()))))
+      } catch {
+        return JSON.parse(text)
+      }
+    }
+    return JSON.parse(text)
   } catch {
     return null
   }
@@ -89,7 +98,7 @@ export const useStore = create((set, get) => ({
       let sonyLivChannels = []
       if (sonyLivResult.status === 'fulfilled') {
         const json = decode(sonyLivResult.value, swActive)
-        sonyLivChannels = (Array.isArray(json) ? json : [])
+        sonyLivChannels = (json?.matches || [])
           .filter((m) => m.isLive && (m.dai_url || m.pub_url || m.video_url))
           .map((m, i) => mapSonyLivChannel(m, 300 + i + 1))
       }

@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/cf-sonyliv': {
+        target: 'https://raw.githubusercontent.com',
+        changeOrigin: true,
+        rewrite: () => '/drmlive/sliv-live-events/main/sonyliv.json',
+      },
       '/api/cf-dynamic': {
         target: 'https://newwwwapiiiiii.vercel.app',
         changeOrigin: true,
