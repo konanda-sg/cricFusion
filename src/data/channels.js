@@ -213,7 +213,7 @@ function sonyLivLogo(channel) {
 
 export function mapSonyLivChannel(match, id) {
   const lang = match.audioLanguageName || 'ENG'
-  const url  = match.dai_url || match.pub_url || match.video_url
+  const url  = toSlProxy(match.dai_url || match.pub_url || match.video_url)
   return {
     id,
     key:          `sl_${match.contentId}`,

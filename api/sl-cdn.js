@@ -5,19 +5,27 @@
 
 export const config = { runtime: 'edge' }
 
+function proxyAkamaiUrl(url, hdnea) {
+  let out = url
+  if (out.startsWith('https://sonydaimenew.akamaized.net/')) {
+    out = '/sl-cdn/' + out.slice('https://sonydaimenew.akamaized.net/'.length)
+  }
+  if (hdnea && !out.includes('hdnea=')) {
+    out += out.includes('?') ? `&hdnea=${hdnea}` : `?hdnea=${hdnea}`
+  }
+  return out
+}
+
 function rewriteManifest(text, hdnea) {
-  return text.replace(/^(?!#|\s*$)(.+)$/gm, (line) => {
-    let url = line.trim()
-    // Rewrite absolute Akamai CDN URLs to go through this proxy
-    if (url.startsWith('https://sonydaimenew.akamaized.net/')) {
-      url = '/sl-cdn/' + url.slice('https://sonydaimenew.akamaized.net/'.length)
-    }
-    // Inject hdnea token into every URL that doesn't already have it
-    if (hdnea && !url.includes('hdnea=')) {
-      url += url.includes('?') ? `&hdnea=${hdnea}` : `?hdnea=${hdnea}`
-    }
-    return url
-  })
+  // Rewrite plain URL lines (variant playlists, segments)
+  let out = text.replace(/^(?!#|\s*$)(.+)$/gm, (line) => proxyAkamaiUrl(line.trim(), hdnea))
+
+  // Rewrite URI="..." inside #EXT-X-KEY and #EXT-X-MEDIA tags (AES key URLs)
+  out = out.replace(/(URI=")([^"]+)(")/g, (_, open, uri, close) =>
+    `${open}${proxyAkamaiUrl(uri, hdnea)}${close}`
+  )
+
+  return out
 }
 
 export default async function handler(req) {
