@@ -7,6 +7,12 @@ import SettingsMenu from './SettingsMenu'
 import SeekIndicator from './SeekIndicator'
 import SubtitleOverlay from './SubtitleOverlay'
 
+const LANG_NAMES = { en: 'English', hi: 'Hindi', ta: 'Tamil', te: 'Telugu', kn: 'Kannada', mr: 'Marathi', pa: 'Punjabi', bn: 'Bengali', und: 'Default', mul: 'Multi' }
+function formatLangLabel(code) {
+  if (!code) return 'Audio'
+  return LANG_NAMES[code.toLowerCase()] || code.toUpperCase()
+}
+
 // Extract the __hdnea__ token from a Jio CDN URL to re-append on segment requests
 function extractToken(url) {
   const match = url.match(/[?&](__hdnea__=[^&]+)/)
@@ -58,6 +64,8 @@ export default function VideoPlayer({ channel }) {
     subtitleMode: null,     // null | { type: 'track', index } | { type: 'speech' }
     subtitleText: '',       // current subtitle line(s) to display
     subtitleInterim: '',    // interim speech text (lighter colour)
+    audioTracks: [],        // [{ id: string, label: string }]
+    audioTrack: null,       // string id of active audio track
   })
 
   const update = useCallback((patch) => {
@@ -76,7 +84,7 @@ export default function VideoPlayer({ channel }) {
     let isCancelled = false
     let hlsRetryTimer = null
     fallbackTriedRef.current = false
-    update({ loading: true, playing: false, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '' })
+    update({ loading: true, playing: false, error: null, currentTime: 0, duration: 0, qualityLevels: [], isLive: false, quality: 'Auto', subtitleMode: null, subtitleText: '', subtitleInterim: '', audioTracks: [], audioTrack: null })
     setStreamTracks([])
 
     // Stop any active subtitle session
@@ -165,13 +173,31 @@ export default function VideoPlayer({ channel }) {
       // Once manifest + segments are flowing, populate quality levels
       player.addEventListener('streaming', () => {
         const tracks = player.getVariantTracks()
-        const heights = [...new Set(tracks.map((t) => t.height).filter(Boolean))].sort((a, b) => b - a)
-        const levels = [
-          { id: -1, label: 'Auto' },
-          ...heights.map((h, i) => ({ id: i, label: `${h}p`, height: h })),
-        ]
+        const seen = new Set()
+        const shakaLevels = []
+        tracks
+          .filter((t) => t.height)
+          .sort((a, b) => a.height - b.height || (a.frameRate || 0) - (b.frameRate || 0))
+          .forEach((t) => {
+            const fps = t.frameRate ? Math.round(t.frameRate) : null
+            const key = `${t.height}_${fps ?? ''}`
+            if (seen.has(key)) return
+            seen.add(key)
+            const label = `${t.height}p${t.height === 1080 && fps ? ` ${fps}fps` : ''}`
+            shakaLevels.push({ id: shakaLevels.length, label, height: t.height, fps })
+          })
+        const levels = [{ id: -1, label: 'Auto' }, ...shakaLevels]
+
+        // Populate audio tracks from available languages
+        const audioLangs = player.getAudioLanguagesAndRoles?.() ?? []
+        const seenLangs = new Set()
+        const audioTracks = audioLangs
+          .filter(({ language }) => { if (seenLangs.has(language)) return false; seenLangs.add(language); return true })
+          .map(({ language, role }) => ({ id: language, label: formatLangLabel(language), role }))
+        const activeAudio = player.getAudioLanguage?.() ?? null
+
         // Stream is live — clear any stale error overlay immediately
-        update({ qualityLevels: levels, loading: false, isLive: player.isLive(), error: null })
+        update({ qualityLevels: levels, loading: false, isLive: player.isLive(), error: null, audioTracks, audioTrack: activeAudio })
 
         const tryPlay = () => {
           video.play().catch((err) => {
@@ -228,7 +254,17 @@ export default function VideoPlayer({ channel }) {
       hls.attachMedia(video)
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        const levels = data.levels.map((l, i) => ({ id: i, label: l.height ? `${l.height}p` : `Level ${i + 1}` }))
+        // Deduplicate by height+fps, keeping the highest-bitrate entry per resolution tier
+        const bestByKey = {}
+        data.levels.forEach((l, i) => {
+          const fps = l.attrs?.['FRAME-RATE'] ? Math.round(parseFloat(l.attrs['FRAME-RATE'])) : null
+          const key = `${l.height ?? i}_${fps ?? ''}`
+          if (!bestByKey[key] || (l.bitrate ?? 0) > (bestByKey[key].bitrate ?? 0)) {
+            const label = l.height ? `${l.height}p${l.height === 1080 && fps ? ` ${fps}fps` : ''}` : `Level ${i + 1}`
+            bestByKey[key] = { id: i, label, height: l.height, fps, bitrate: l.bitrate }
+          }
+        })
+        const levels = Object.values(bestByKey).sort((a, b) => (a.height ?? 0) - (b.height ?? 0))
         update({ qualityLevels: [{ id: -1, label: 'Auto' }, ...levels], loading: false })
         video.play().catch((err) => {
           // MediaSource not ready yet — wait for canplay then retry
@@ -237,10 +273,19 @@ export default function VideoPlayer({ channel }) {
           }
         })
       })
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_, { audioTracks: tracks }) => {
+        const mapped = (tracks || []).map((t) => ({
+          id: String(t.id),
+          label: t.name || formatLangLabel(t.lang) || `Audio ${t.id + 1}`,
+        }))
+        const currentId = hls.audioTrack >= 0 ? String(hls.audioTrack) : (mapped[0]?.id ?? null)
+        update({ audioTracks: mapped, audioTrack: currentId })
+      })
+      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_, { id }) => update({ audioTrack: String(id) }))
       hls.on(Hls.Events.LEVEL_LOADED, (_, d) => update({ isLive: !!d.details?.live }))
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, { level }) => {
-        const lev = hls.levels[level]
-        update({ quality: lev?.height ? `${lev.height}p` : 'Auto' })
+        const stored = liveRef.current.qualityLevels.find((l) => l.id === level)
+        update({ quality: stored?.label ?? 'Auto' })
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
         if (d.fatal) {
@@ -618,19 +663,28 @@ export default function VideoPlayer({ channel }) {
         const levels = liveRef.current.qualityLevels
         const level  = levels.find((l) => l.id === levelId)
         if (level?.height) {
-          shakaRef.current.configure({
-            abr: { enabled: false },
-            restrictions: { maxHeight: level.height, minHeight: level.height },
-          })
-          update({ quality: `${level.height}p`, showQualityMenu: false })
+          const restrictions = { maxHeight: level.height, minHeight: level.height }
+          if (level.fps) { restrictions.maxFrameRate = level.fps; restrictions.minFrameRate = level.fps }
+          shakaRef.current.configure({ abr: { enabled: false }, restrictions })
+          update({ quality: level.label, showQualityMenu: false })
         }
       }
     } else if (hlsRef.current) {
       hlsRef.current.currentLevel = levelId
-      const lev = hlsRef.current.levels[levelId]
-      update({ quality: levelId === -1 ? 'Auto' : lev?.height ? `${lev.height}p` : 'Auto', showQualityMenu: false })
+      const stored = liveRef.current.qualityLevels.find((l) => l.id === levelId)
+      update({ quality: levelId === -1 ? 'Auto' : stored?.label ?? 'Auto', showQualityMenu: false })
     }
   }, [])
+
+  const setAudioTrack = useCallback((id) => {
+    if (hlsRef.current) {
+      hlsRef.current.audioTrack = parseInt(id, 10)
+    } else if (shakaRef.current) {
+      shakaRef.current.selectAudioLanguage(id)
+      update({ audioTrack: id })
+    }
+    update({ showQualityMenu: false })
+  }, [update])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
@@ -874,6 +928,9 @@ export default function VideoPlayer({ channel }) {
             levels={qualityLevels}
             currentQuality={state.quality}
             onSelectQuality={setQuality}
+            audioTracks={state.audioTracks}
+            audioTrack={state.audioTrack}
+            onSelectAudio={setAudioTrack}
             streamTracks={streamTracks}
             subtitleMode={state.subtitleMode}
             onSelectSubtitle={applySubtitle}

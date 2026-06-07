@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { Check, Zap, Mic, Sparkles } from 'lucide-react'
+import { Check, Zap, Mic, Sparkles, Music2 } from 'lucide-react'
 
 export default function SettingsMenu({
   levels, currentQuality, onSelectQuality,
+  audioTracks, audioTrack, onSelectAudio,
   streamTracks, subtitleMode, onSelectSubtitle,
   enhance, onToggleEnhance,
   onClose,
@@ -37,6 +38,30 @@ export default function SettingsMenu({
             </button>
           ))}
         </div>
+
+        {/* ── Audio Track ── */}
+        {audioTracks?.length > 1 && (
+          <>
+            <div className="px-3 pt-2.5 pb-1.5 border-b border-white/10">
+              <p className="text-white/50 text-[10px] font-semibold uppercase tracking-wider">Audio</p>
+            </div>
+            <div className="py-1 border-b border-white/10">
+              {audioTracks.map((track) => (
+                <button
+                  key={track.id}
+                  onClick={() => onSelectAudio(track.id)}
+                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Music2 size={12} className="text-brand-400" />
+                    <span className="text-white text-sm">{track.label}</span>
+                  </div>
+                  {audioTrack === track.id && <Check size={14} className="text-brand-400" />}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* ── Subtitles ── */}
         <div className="px-3 pt-2.5 pb-1.5 border-b border-white/10">
