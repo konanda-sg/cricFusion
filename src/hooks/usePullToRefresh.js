@@ -50,7 +50,8 @@ export function usePullToRefresh(onRefresh) {
       pullingRef.current = false
       pullDistRef.current = 0
       setPullY(0)
-      if (dist >= THRESHOLD) {
+      // Final guard: only reload if still at the very top when finger lifts
+      if (dist >= THRESHOLD && el.scrollTop < 1) {
         setRefreshing(true)
         try { await onRefresh?.() } catch {}
         setRefreshing(false)
