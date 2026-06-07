@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { WifiOff, Wifi } from 'lucide-react'
+import { WifiOff, Wifi, X, RefreshCw } from 'lucide-react'
 import { useStore } from './store/useStore'
 import Header from './components/Layout/Header'
 import BottomNav from './components/Layout/BottomNav'
@@ -45,7 +45,8 @@ function AppContent() {
 
 export default function App() {
   const { darkMode, loadChannels, refreshChannels } = useStore()
-  const [isOnline, setIsOnline]         = useState(navigator.onLine)
+  const [isOnline, setIsOnline]           = useState(navigator.onLine)
+  const [offlineDismissed, setDismissed]  = useState(false)
   const [showOnlineToast, setOnlineToast] = useState(false)
 
   useEffect(() => {
@@ -79,7 +80,7 @@ export default function App() {
       refreshChannels()
       setTimeout(() => setOnlineToast(false), 3000)
     }
-    const goOffline = () => setIsOnline(false)
+    const goOffline = () => { setIsOnline(false); setDismissed(false) }
     window.addEventListener('online',  goOnline)
     window.addEventListener('offline', goOffline)
     return () => {
@@ -96,7 +97,7 @@ export default function App() {
 
       {/* ── Offline overlay ── */}
       <AnimatePresence>
-        {!isOnline && (
+        {!isOnline && !offlineDismissed && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -104,6 +105,15 @@ export default function App() {
             transition={{ duration: 0.25 }}
             className="fixed inset-0 z-[200] bg-dark-900/95 backdrop-blur-sm flex flex-col items-center justify-center px-8 text-center"
           >
+            {/* Close button */}
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setDismissed(true)}
+              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/[0.08] flex items-center justify-center"
+            >
+              <X size={16} className="text-white/50" />
+            </motion.button>
+
             <motion.div
               animate={{ scale: [1, 1.07, 1] }}
               transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
@@ -115,9 +125,20 @@ export default function App() {
             <p className="text-white/40 text-sm leading-relaxed max-w-xs">
               Check your internet. Streams will resume automatically when you're back online.
             </p>
-            <div className="flex items-center gap-2 mt-8 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-red-400 text-sm font-semibold">Offline</span>
+
+            <div className="flex items-center gap-3 mt-8">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-red-400 text-sm font-semibold">Offline</span>
+              </div>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => refreshChannels()}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/[0.1] text-white/60 text-sm font-semibold hover:text-white transition-colors"
+              >
+                <RefreshCw size={13} />
+                Retry
+              </motion.button>
             </div>
           </motion.div>
         )}
@@ -131,10 +152,12 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-brand-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-xl pointer-events-none"
+            className="fixed top-20 inset-x-0 z-[200] flex justify-center pointer-events-none"
           >
-            <Wifi size={14} />
-            Back online
+            <div className="flex items-center gap-2 bg-brand-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-xl">
+              <Wifi size={14} />
+              Back online
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
