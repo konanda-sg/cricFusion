@@ -3,7 +3,7 @@
 // fetches also go through this proxy. Injects the hdnea token into
 // relative variant/segment URLs so Akamai auth passes on every request.
 
-export const config = { runtime: 'edge' }
+export const config = { runtime: 'edge', preferredRegion: ['bom1'] }
 
 function proxyAkamaiUrl(url, hdnea) {
   let out = url
@@ -56,13 +56,6 @@ export default async function handler(req) {
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
         referer: 'https://www.sonyliv.com/',
         origin: 'https://www.sonyliv.com',
-        'sec-ch-ua': '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-site',
-        dnt: '1',
       },
     })
   } catch (err) {
@@ -71,6 +64,16 @@ export default async function handler(req) {
   }
 
   console.log('[sl-cdn] upstream status:', upstreamResp.status)
+
+  if (upstreamResp.status === 403) {
+    const body = await upstreamResp.text()
+    console.log('[sl-cdn] 403 body:', body)
+    return new Response(`Upstream 403\n\n${body}`, {
+      status: 403,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/plain' },
+    })
+  }
+
   const ct = upstreamResp.headers.get('content-type') || 'application/octet-stream'
   const responseHeaders = {
     'Access-Control-Allow-Origin': '*',
