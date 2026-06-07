@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { Heart } from 'lucide-react'
 import HeroSection from '../components/UI/HeroSection'
 import CategoryTabs from '../components/UI/CategoryTabs'
 import ChannelCard from '../components/UI/ChannelCard'
@@ -8,8 +9,13 @@ import { useStore } from '../store/useStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 
 export default function Home() {
-  const { activeCategory, searchQuery, channels, channelsLoading } = useStore()
+  const { activeCategory, searchQuery, channels, channelsLoading, favorites } = useStore()
   const { containerRef, pullY, refreshing, threshold } = usePullToRefresh(() => window.location.reload())
+
+  const favoriteChannels = useMemo(
+    () => channels.filter((c) => favorites.includes(c.id)),
+    [channels, favorites]
+  )
 
   const filtered = useMemo(() => {
     let list = channels
@@ -45,6 +51,30 @@ export default function Home() {
       <div className="px-4 md:px-6 pt-5 pb-3">
         <CategoryTabs />
       </div>
+
+      {/* Favourites row — only on trending tab with no active search */}
+      {favoriteChannels.length > 0 && activeCategory === 'all' && !searchQuery.trim() && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pb-1"
+        >
+          <div className="flex items-center gap-2 px-4 md:px-6 mb-2.5">
+            <Heart size={13} className="text-red-400 fill-red-400" />
+            <span className="text-white font-bold text-sm">Favourites</span>
+            <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">
+              {favoriteChannels.length}
+            </span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 md:px-6 pb-3">
+            {favoriteChannels.map((ch, i) => (
+              <div key={ch.id} className="flex-shrink-0 w-44">
+                <ChannelCard channel={ch} index={i} />
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Channel grid */}
       <div className="px-4 md:px-6 pb-6">

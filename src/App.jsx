@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { WifiOff, Wifi } from 'lucide-react'
 import { useStore } from './store/useStore'
 import Header from './components/Layout/Header'
 import BottomNav from './components/Layout/BottomNav'
@@ -43,7 +44,9 @@ function AppContent() {
 }
 
 export default function App() {
-  const { darkMode, loadChannels } = useStore()
+  const { darkMode, loadChannels, refreshChannels } = useStore()
+  const [isOnline, setIsOnline]         = useState(navigator.onLine)
+  const [showOnlineToast, setOnlineToast] = useState(false)
 
   useEffect(() => {
     const html = document.documentElement
@@ -69,9 +72,72 @@ export default function App() {
     boot()
   }, [])
 
+  useEffect(() => {
+    const goOnline = () => {
+      setIsOnline(true)
+      setOnlineToast(true)
+      refreshChannels()
+      setTimeout(() => setOnlineToast(false), 3000)
+    }
+    const goOffline = () => setIsOnline(false)
+    window.addEventListener('online',  goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online',  goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
+
   return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
+    <>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+
+      {/* ── Offline overlay ── */}
+      <AnimatePresence>
+        {!isOnline && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-[200] bg-dark-900/95 backdrop-blur-sm flex flex-col items-center justify-center px-8 text-center"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.07, 1] }}
+              transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
+              className="w-20 h-20 rounded-3xl bg-dark-700 flex items-center justify-center mb-6 border border-white/[0.07]"
+            >
+              <WifiOff size={36} className="text-white/30" />
+            </motion.div>
+            <h2 className="text-white font-bold text-xl mb-2">No Connection</h2>
+            <p className="text-white/40 text-sm leading-relaxed max-w-xs">
+              Check your internet. Streams will resume automatically when you're back online.
+            </p>
+            <div className="flex items-center gap-2 mt-8 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-red-400 text-sm font-semibold">Offline</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Back-online toast ── */}
+      <AnimatePresence>
+        {showOnlineToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-brand-500 text-black px-4 py-2 rounded-full font-bold text-sm shadow-xl pointer-events-none"
+          >
+            <Wifi size={14} />
+            Back online
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

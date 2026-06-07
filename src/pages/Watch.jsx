@@ -13,14 +13,14 @@ import { useStore } from '../store/useStore'
 export default function Watch() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { setCurrentChannel, channels } = useStore()
-  const [liked, setLiked] = useState(false)
+  const { setCurrentChannel, channels, favorites, toggleFavorite } = useStore()
   const [showSharePanel, setShowSharePanel] = useState(false)
   const [copied, setCopied] = useState(false)
   const sharePanelRef = useRef(null)
   const playerRef = useRef(null)
 
   const channel = channels.find((c) => c.id === Number(id))
+  const liked = favorites.includes(channel?.id)
   const related = channels.filter((c) => c.id !== Number(id) && c.isLive).slice(0, 6)
   const liveChannels = channels.filter((c) => c.isLive && c.id !== Number(id))
 
@@ -178,7 +178,7 @@ export default function Watch() {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <motion.button
                   whileTap={{ scale: 0.92 }}
-                  onClick={() => setLiked((v) => !v)}
+                  onClick={() => toggleFavorite(channel.id)}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all border ${
                     liked ? 'bg-red-500/15 text-red-400 border-red-500/30' : 'glass text-white/60 border-white/[0.07] hover:text-white'
                   }`}

@@ -70,6 +70,16 @@ export const useStore = create((set, get) => ({
     set({ preferredQuality: q })
   },
 
+  // ── Favourites ─────────────────────────────────────────────────────────
+  favorites: (() => { try { return JSON.parse(localStorage.getItem('cf_favorites') || '[]') } catch { return [] } })(),
+  toggleFavorite: (id) => set((s) => {
+    const next = s.favorites.includes(id)
+      ? s.favorites.filter((f) => f !== id)
+      : [...s.favorites, id]
+    try { localStorage.setItem('cf_favorites', JSON.stringify(next)) } catch {}
+    return { favorites: next }
+  }),
+
   // ── Channels (loaded from API) ─────────────────────────────────────────
   channels: STATIC_CHANNELS,         // start with static; API channels prepended on load
   channelsLoading: false,
