@@ -1,9 +1,8 @@
-// Vercel Edge Function — transparent proxy for Sony LIV / Akamai CDN.
-// Adds CORS headers and rewrites manifest content so HLS.js segment
-// fetches also go through this proxy. Injects the hdnea token into
-// relative variant/segment URLs so Akamai auth passes on every request.
+import { Readable } from 'node:stream'
 
-export const config = { runtime: 'edge', preferredRegion: ['bom1'] }
+// Node.js serverless in Mumbai (AWS ap-south-1) — avoids Cloudflare edge IPs
+// that Akamai blocks. Edge runtime used Cloudflare; this uses AWS Lambda.
+export const config = { regions: ['bom1'] }
 
 function proxyAkamaiUrl(url, hdnea) {
   let out = url
@@ -20,80 +19,77 @@ function proxyAkamaiUrl(url, hdnea) {
 }
 
 function rewriteManifest(text, hdnea) {
-  // Rewrite plain URL lines (variant playlists, segments)
   let out = text.replace(/^(?!#|\s*$)(.+)$/gm, (line) => proxyAkamaiUrl(line.trim(), hdnea))
-
-  // Rewrite URI="..." inside #EXT-X-KEY and #EXT-X-MEDIA tags (AES key URLs)
   out = out.replace(/(URI=")([^"]+)(")/g, (_, open, uri, close) =>
     `${open}${proxyAkamaiUrl(uri, hdnea)}${close}`
   )
-
   return out
 }
 
-export default async function handler(req) {
-  const url = new URL(req.url)
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cache-Control', 'no-cache, no-store')
+
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', '*')
+    res.statusCode = 204
+    return res.end()
+  }
+
+  const url = new URL(req.url, 'https://x.x')
   const path = url.searchParams.get('path') || ''
   const hdnea = url.searchParams.get('hdnea') || ''
   const akamaiHost = url.searchParams.get('host') === 'p'
     ? 'sonypartnersdaimenew.akamaized.net'
     : 'sonydaimenew.akamaized.net'
 
-  // Strip 'path=' and 'host=' from the raw query string and pass everything else to Akamai
-  // verbatim. Avoid URLSearchParams.toString() — it re-encodes '=' to '%3D' inside
-  // token values (hdnea, hdntl) and breaks Akamai's signature validation.
+  // Preserve raw query string verbatim — URLSearchParams.toString() re-encodes
+  // '=' inside hdnea values as '%3D', breaking Akamai's HMAC validation.
   const rawQs = url.search.slice(1).split('&')
     .filter((p) => !p.startsWith('path=') && !p.startsWith('host='))
     .join('&')
 
   const upstream = `https://${akamaiHost}/${path}${rawQs ? '?' + rawQs : ''}`
 
-  console.log('[sl-cdn] req.url:', req.url)
-  console.log('[sl-cdn] path:', path)
-  console.log('[sl-cdn] rawQs:', rawQs)
-  console.log('[sl-cdn] upstream:', upstream)
-
   let upstreamResp
   try {
     upstreamResp = await fetch(upstream, {
-      method: req.method,
       headers: {
-        accept: req.headers.get('accept') || '*/*',
+        accept: req.headers['accept'] || '*/*',
         'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
         referer: 'https://www.sonyliv.com/',
         origin: 'https://www.sonyliv.com',
       },
     })
   } catch (err) {
-    console.log('[sl-cdn] fetch error:', err?.message)
-    return new Response('Proxy error', { status: 502 })
+    res.statusCode = 502
+    return res.end('Proxy error: ' + err.message)
   }
-
-  console.log('[sl-cdn] upstream status:', upstreamResp.status)
 
   if (upstreamResp.status === 403) {
     const body = await upstreamResp.text()
-    console.log('[sl-cdn] 403 body:', body)
-    return new Response(`Upstream 403\n\n${body}`, {
-      status: 403,
-      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/plain' },
-    })
+    res.statusCode = 403
+    res.setHeader('Content-Type', 'text/plain')
+    return res.end(`Upstream 403 from ${akamaiHost}\n\n${body}`)
   }
 
   const ct = upstreamResp.headers.get('content-type') || 'application/octet-stream'
-  const responseHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-cache, no-store',
-    'Content-Type': ct,
-  }
+  res.statusCode = upstreamResp.status
+  res.setHeader('Content-Type', ct)
 
   if (ct.includes('mpegurl') || path.endsWith('.m3u8')) {
-    let text = await upstreamResp.text()
-    text = rewriteManifest(text, hdnea)
-    return new Response(text, { status: upstreamResp.status, headers: responseHeaders })
+    const text = rewriteManifest(await upstreamResp.text(), hdnea)
+    return res.end(text)
   }
 
-  return new Response(upstreamResp.body, { status: upstreamResp.status, headers: responseHeaders })
+  // Stream binary segments directly without buffering
+  if (upstreamResp.body) {
+    const nodeStream = Readable.fromWeb(upstreamResp.body)
+    nodeStream.on('error', () => { if (!res.writableEnded) res.end() })
+    nodeStream.pipe(res)
+  } else {
+    res.end()
+  }
 }
