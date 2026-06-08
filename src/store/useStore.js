@@ -5,6 +5,7 @@ import {
 } from '../data/channels'
 import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
+import { FEATURES } from '../config/features'
 
 const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
 const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?id=...
@@ -180,16 +181,18 @@ export const useStore = create((set, get) => ({
 
       // ── Tata Play (native OTP login — loads all channels from API) ────────
       let tpApiChannels = []
-      const tpCreds = get().tpCreds
-      if (tpCreds?.subscriberId && tpCreds?.userAuthenticateToken) {
-        try {
-          const tpResp = await fetch(
-            `/api/tp-channels?sub=${encodeURIComponent(tpCreds.subscriberId)}&tok=${encodeURIComponent(tpCreds.userAuthenticateToken)}`
-          )
-          const tpData = await tpResp.json()
-          tpApiChannels = tpData.channels || []
-        } catch (e) {
-          console.warn('Tata Play channels load failed:', e)
+      if (FEATURES.TATAPLAY) {
+        const tpCreds = get().tpCreds
+        if (tpCreds?.subscriberId && tpCreds?.userAuthenticateToken) {
+          try {
+            const tpResp = await fetch(
+              `/api/tp-channels?sub=${encodeURIComponent(tpCreds.subscriberId)}&tok=${encodeURIComponent(tpCreds.userAuthenticateToken)}`
+            )
+            const tpData = await tpResp.json()
+            tpApiChannels = tpData.channels || []
+          } catch (e) {
+            console.warn('Tata Play channels load failed:', e)
+          }
         }
       }
 

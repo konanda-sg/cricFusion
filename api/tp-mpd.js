@@ -101,10 +101,14 @@ function rewriteMpd(text, baseUrl, pssh) {
     out = out.replace('mp4protection:2011"', `mp4protection:2011" cenc:default_KID="${pssh.kid}"`)
   }
 
-  // Inject ClearKey ContentProtection before the first remaining ContentProtection
+  // Inject ClearKey ContentProtection before EVERY mp4protection element so that
+  // all AdaptationSets (audio + video) declare the ClearKey system. Using only
+  // .replace() (first match) leaves the video AdaptationSet without ClearKey,
+  // causing Shaka to fall back to Widevine (error 6012).
   if (pssh.kid) {
-    const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${pssh.kid}</cenc:default_KID></ContentProtection>`
-    out = out.replace('<ContentProtection', `${ck}\n        <ContentProtection`)
+    const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${pssh.kid}</cenc:default_KID></ContentProtection>\n        `
+    out = out.replace(/<ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection/g,
+      `${ck}<ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection`)
   }
 
   return out

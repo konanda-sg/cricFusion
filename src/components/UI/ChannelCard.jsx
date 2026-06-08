@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Play } from 'lucide-react'
 
-export default function ChannelCard({ channel, index = 0 }) {
+export default function ChannelCard({ channel, index = 0, animated = true }) {
   const navigate = useNavigate()
   const cardRef  = useRef(null)
   const [imgFailed, setImgFailed] = useState(false)
@@ -23,12 +23,14 @@ export default function ChannelCard({ channel, index = 0 }) {
     setTilt({ x: 0, y: 0 })
   }, [])
 
+  const entryProps = animated
+    ? { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { delay: Math.min(index, 14) * 0.04, duration: 0.32, ease: 'easeOut' } }
+    : {}
+
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index, 14) * 0.04, duration: 0.32, ease: 'easeOut' }}
+      {...entryProps}
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={resetTilt}

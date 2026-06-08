@@ -6,6 +6,7 @@ import {
   Satellite, Smartphone, KeyRound,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { FEATURES } from '../config/features'
 
 const APP_VERSION = '1.0.0'
 const QUALITY_OPTIONS = ['Auto', '1080p', '720p', '480p', '360p']
@@ -267,7 +268,7 @@ export default function Account() {
       </Section>
 
       {/* Tata Play */}
-      <Section title="Tata Play">
+      {FEATURES.TATAPLAY && <Section title="Tata Play">
         {tpCreds ? (
           <>
             <div className="px-4 py-3 flex items-center gap-3">
@@ -299,7 +300,7 @@ export default function Account() {
             accent="lime"
           />
         )}
-      </Section>
+      </Section>}
 
       {/* Channels */}
       <Section title="Channels">
@@ -414,7 +415,7 @@ export default function Account() {
       </BottomSheet>
 
       {/* ── Tata Play Login Sheet ── */}
-      <BottomSheet open={showTpLogin} onClose={() => setShowTpLogin(false)} title="Tata Play Login">
+      {FEATURES.TATAPLAY && <BottomSheet open={showTpLogin} onClose={() => setShowTpLogin(false)} title="Tata Play Login">
         <div className="px-5 py-4 pb-8 space-y-4">
           <p className="text-white/40 text-[13px] leading-relaxed">
             Login with any Indian mobile number. All Tata Play channels load directly in CricFusion — no external server needed.
@@ -497,7 +498,7 @@ export default function Account() {
             Works with any Indian mobile — no Tata Play subscription required for login.
           </p>
         </div>
-      </BottomSheet>
+      </BottomSheet>}
 
       {/* ── Custom Playlist Sheet ── */}
       <BottomSheet open={showPlaylist} onClose={() => setShowPlaylist(false)} title="Custom Playlist (M3U)">

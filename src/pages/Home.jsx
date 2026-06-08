@@ -7,6 +7,7 @@ import ChannelCard from '../components/UI/ChannelCard'
 import PullIndicator from '../components/UI/PullIndicator'
 import { useStore } from '../store/useStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { usePagedList } from '../hooks/usePagedList'
 
 export default function Home() {
   const { activeCategory, searchQuery, channels, channelsLoading, favorites } = useStore()
@@ -39,6 +40,9 @@ export default function Home() {
     }
     return list
   }, [activeCategory, searchQuery, channels])
+
+  const { visible, hasMore, sentinelRef } = usePagedList(filtered, containerRef)
+  const animated = filtered.length <= 40
 
   return (
     <main ref={containerRef} className="flex-1 overflow-y-auto bg-black pb-safe no-scrollbar">
@@ -102,11 +106,14 @@ export default function Home() {
             <p className="text-white/30 text-sm mt-1">Try a different category or search</p>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4">
-            {filtered.map((ch, i) => (
-              <ChannelCard key={ch.id} channel={ch} index={i} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4">
+              {visible.map((ch, i) => (
+                <ChannelCard key={ch.id} channel={ch} index={i} animated={animated} />
+              ))}
+            </div>
+            {hasMore && <div ref={sentinelRef} className="h-4" />}
+          </>
         )}
       </div>
     </main>

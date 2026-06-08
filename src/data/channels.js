@@ -3,6 +3,7 @@
 // Only add UI fields here — never hardcode stream URLs.
 // localStorage.setItem('cf_dev', '1')
 // Display order for API channels
+import { FEATURES } from '../config/features'
 // Note: the real stream API URL lives only in public/sw.js (server-side proxy).
 export const CHANNEL_ORDER = ['EN', 'sidhu', 'EN2', 'sidhu2', 's1', 's2', 's3', 's5']
 
@@ -285,7 +286,7 @@ export const categories = [
   { id: 'all',         label: 'Trending',     icon: '🔥' },
   { id: 'fancode',     label: 'FanCode',      icon: '⚡' },
   { id: 'sonyliv',     label: 'Sony LIV',     icon: '📺' },
-  { id: 'tataplay',    label: 'Tata Play',    icon: '📡' },
+  ...(FEATURES.TATAPLAY ? [{ id: 'tataplay', label: 'Tata Play', icon: '📡' }] : []),
   { id: 'cricket',     label: 'Cricket',      icon: '🏏' },
   { id: 'football',    label: 'Football',     icon: '⚽' },
   { id: 'tennis',      label: 'Tennis',       icon: '🎾' },

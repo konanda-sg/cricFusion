@@ -6,6 +6,7 @@ import ChannelCard from '../components/UI/ChannelCard'
 import PullIndicator from '../components/UI/PullIndicator'
 import { useStore } from '../store/useStore'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
+import { usePagedList } from '../hooks/usePagedList'
 
 export default function Sports() {
   const { activeCategory, setActiveCategory, channels, channelsLoading } = useStore()
@@ -20,6 +21,9 @@ export default function Sports() {
     if (activeCategory !== 'all')       return channels.filter((c) => c.category === activeCategory)
     return channels
   }, [activeCategory, channels])
+
+  const { visible, hasMore, sentinelRef } = usePagedList(filtered, containerRef)
+  const animated = filtered.length <= 40
 
   const liveCount = filtered.filter((c) => c.isLive).length
 
@@ -79,11 +83,14 @@ export default function Sports() {
             </button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4">
-            {filtered.map((ch, i) => (
-              <ChannelCard key={ch.id} channel={ch} index={i} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4">
+              {visible.map((ch, i) => (
+                <ChannelCard key={ch.id} channel={ch} index={i} animated={animated} />
+              ))}
+            </div>
+            {hasMore && <div ref={sentinelRef} className="h-4" />}
+          </>
         )}
       </div>
     </main>
