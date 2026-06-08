@@ -23,6 +23,8 @@ export default function Home() {
       list = list.filter((c) => c.key?.startsWith('fc_'))
     } else if (activeCategory === 'sonyliv') {
       list = list.filter((c) => c.key?.startsWith('sl_'))
+    } else if (activeCategory === 'tataplay') {
+      list = list.filter((c) => c.key?.startsWith('tp_'))
     } else if (activeCategory !== 'all') {
       list = list.filter((c) => c.category === activeCategory)
     }

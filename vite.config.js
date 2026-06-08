@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { pathToFileURL } from 'url'
+import nodePath from 'path'
 
 const AKAMAI = 'sonydaimenew.akamaized.net'
 
@@ -99,9 +101,146 @@ function sonyLivDevProxy() {
   }
 }
 
+// Dev-time proxies for Tata Play OTP login + channel/MPD APIs
+// These forward requests to the same external APIs the Vercel functions call.
+function tpApiDevProxy() {
+  return {
+    name: 'tp-api-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url || ''
+
+        // /api/tp-otp  /api/tp-login  /api/tp-channels  /api/tp-mpd
+        if (!url.startsWith('/api/tp-otp') && !url.startsWith('/api/tp-login') &&
+            !url.startsWith('/api/tp-channels') && !url.startsWith('/api/tp-mpd?')) return next()
+
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); res.statusCode = 204; return res.end() }
+
+        // Collect body for POST requests
+        let body = {}
+        if (req.method === 'POST') {
+          const raw = await new Promise((resolve) => {
+            const chunks = []; req.on('data', (c) => chunks.push(c)); req.on('end', () => resolve(Buffer.concat(chunks).toString()))
+          })
+          try { body = JSON.parse(raw) } catch {}
+        }
+        const qs = new URL(url, 'http://localhost')
+
+        try {
+          // Use absolute file:// URL so import() resolves correctly even when
+          // vite.config.js is compiled to a temp directory by esbuild.
+          const handlerName = url.split('?')[0].replace('/api/', '')
+          const handlerUrl = pathToFileURL(nodePath.join(process.cwd(), 'api', handlerName + '.js')).href
+          const mod = await import(handlerUrl)
+          const fakeReq = { method: req.method, query: Object.fromEntries(qs.searchParams), body, headers: req.headers }
+          const fakeRes = {
+            _status: 200, _headers: {}, _body: null,
+            status(c) { this._status = c; return this },
+            end(b) { res.setHeader('Content-Type', this._headers['Content-Type'] || 'text/plain'); res.statusCode = this._status; res.end(b) },
+            send(b) { res.setHeader('Content-Type', this._headers['Content-Type'] || 'text/plain'); res.statusCode = this._status; res.end(b) },
+            json(b) { res.setHeader('Content-Type', 'application/json'); res.statusCode = this._status; res.end(JSON.stringify(b)) },
+            setHeader(k, v) { this._headers[k] = v; res.setHeader(k, v) },
+          }
+          await mod.default(fakeReq, fakeRes)
+        } catch (e) {
+          console.error('[tp-api-dev-proxy]', e)
+          if (!res.headersSent) { res.statusCode = 500; res.end('Dev proxy error: ' + e.message) }
+        }
+      })
+    },
+  }
+}
+
+// Dev-time proxy for /api/tp-license?id=... — ClearKey license server
+function tpLicenseDevProxy() {
+  return {
+    name: 'tp-license-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/tp-license')) return next()
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', '*')
+        if (req.method === 'OPTIONS') return res.end()
+        const id = new URL(req.url, 'http://localhost').searchParams.get('id')
+        if (!id) { res.statusCode = 400; return res.end('Missing id') }
+        try {
+          const r = await fetch(`https://tp.drmlive-01.workers.dev?id=${encodeURIComponent(id)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://watch.tataplay.com', 'Referer': 'https://watch.tataplay.com/' },
+          })
+          const json = await r.json()
+          res.setHeader('Content-Type', 'application/json')
+          return res.end(JSON.stringify(json))
+        } catch (e) { res.statusCode = 502; return res.end('tp-license error') }
+      })
+    },
+  }
+}
+
+// Dev-time proxy for /api/tp-mpd-proxy?url=... — fetches MPD + injects ClearKey entry
+function tpMpdProxyDev() {
+  return {
+    name: 'tp-mpd-proxy-dev',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/tp-mpd-proxy')) return next()
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        if (req.method === 'OPTIONS') return res.end()
+        const rawUrl = new URL(req.url, 'http://localhost').searchParams.get('url')
+        if (!rawUrl) { res.statusCode = 400; return res.end('Missing url') }
+        let targetUrl
+        try { targetUrl = decodeURIComponent(rawUrl); new URL(targetUrl) } catch { res.statusCode = 400; return res.end('Invalid URL') }
+        try {
+          const r = await fetch(targetUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': '*/*', 'Referer': 'https://watch.tataplay.com/', 'Origin': 'https://watch.tataplay.com' },
+          })
+          let text = await r.text()
+          const kidMatch = text.match(/cenc:default_KID="([0-9a-f-]{36})"/i)
+          if (kidMatch) {
+            const kid = kidMatch[1]
+            const ckEntry = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>`
+            text = text.replace('<ContentProtection', ckEntry + '\n        <ContentProtection')
+          }
+          res.setHeader('Content-Type', 'application/dash+xml')
+          res.setHeader('Cache-Control', 'no-cache')
+          return res.end(text)
+        } catch (e) { res.statusCode = 502; return res.end('tp-mpd-proxy error') }
+      })
+    },
+  }
+}
+
+// Dev-time proxy for /api/m3u-proxy?url=... — fetches the M3U server-side
+function m3uDevProxy() {
+  return {
+    name: 'm3u-proxy-dev',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/m3u-proxy')) return next()
+        const rawUrl = new URL(req.url, 'http://localhost').searchParams.get('url')
+        if (!rawUrl) { res.statusCode = 400; return res.end('Missing ?url=') }
+        let targetUrl
+        try { targetUrl = decodeURIComponent(rawUrl); new URL(targetUrl) } catch { res.statusCode = 400; return res.end('Invalid URL') }
+        try {
+          const r = await fetch(targetUrl, { headers: { 'User-Agent': 'TiviMate/4.6.0 (Android)', 'Accept': '*/*' } })
+          const text = await r.text()
+          res.setHeader('Access-Control-Allow-Origin', '*')
+          res.setHeader('Content-Type', r.headers.get('content-type') || 'audio/x-mpegurl')
+          res.statusCode = r.status
+          return res.end(text)
+        } catch (err) {
+          console.error('[m3u-proxy-dev]', err.message)
+          res.statusCode = 502; return res.end('m3u proxy error')
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), sonyLivDevProxy()],
+  plugins: [react(), sonyLivDevProxy(), m3uDevProxy(), tpLicenseDevProxy(), tpMpdProxyDev(), tpApiDevProxy()],
   server: {
     proxy: {
       '/cf-sonyliv': {

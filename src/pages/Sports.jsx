@@ -14,9 +14,10 @@ export default function Sports() {
   // Ensure "all" is active when landing on Sports for the first time
   // (user may have had a category filtered on Home)
   const filtered = useMemo(() => {
-    if (activeCategory === 'fancode') return channels.filter((c) => c.key?.startsWith('fc_'))
-    if (activeCategory === 'sonyliv')  return channels.filter((c) => c.key?.startsWith('sl_'))
-    if (activeCategory !== 'all')      return channels.filter((c) => c.category === activeCategory)
+    if (activeCategory === 'fancode')   return channels.filter((c) => c.key?.startsWith('fc_'))
+    if (activeCategory === 'sonyliv')   return channels.filter((c) => c.key?.startsWith('sl_'))
+    if (activeCategory === 'tataplay')  return channels.filter((c) => c.key?.startsWith('tp_'))
+    if (activeCategory !== 'all')       return channels.filter((c) => c.category === activeCategory)
     return channels
   }, [activeCategory, channels])
 

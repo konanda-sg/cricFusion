@@ -186,7 +186,7 @@ export default function VideoPlayer({ channel }) {
     video.removeAttribute('src')
     video.load()
 
-    const isMPD = channel.url.includes('.mpd')
+    const isMPD = channel.url.includes('.mpd') || channel.url.includes('/api/tp-mpd')
     const isHLS = channel.url.includes('.m3u8')
 
     // ── DASH / MPD via Shaka Player ──
@@ -207,7 +207,7 @@ export default function VideoPlayer({ channel }) {
       const player = new shaka.Player(video)
       shakaRef.current = player
 
-      // DRM: ClearKey
+      // DRM: ClearKey (inline keys or license server)
       const cfg = {
         streaming: {
           lowLatencyMode: true,
@@ -221,17 +221,25 @@ export default function VideoPlayer({ channel }) {
         cfg.drm = {
           clearKeys: { [channel.clearKey.keyId]: channel.clearKey.key },
         }
+      } else if (channel.licenseServer) {
+        cfg.drm = {
+          servers: { 'org.w3.clearkey': channel.licenseServer },
+        }
       }
       player.configure(cfg)
 
-      // Token injection: append __hdnea__ to every segment request
+      // Request filter: token injection + custom headers (e.g. Tata Play CDN)
       const token = extractToken(channel.url)
-      if (token) {
+      const reqHeaders = channel.reqHeaders || null
+      if (token || reqHeaders) {
         player.getNetworkingEngine().registerRequestFilter((type, request) => {
-          if (type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
+          if (token && type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
             request.uris = request.uris.map((u) =>
               u.includes('?') ? `${u}&${token}` : `${u}?${token}`
             )
+          }
+          if (reqHeaders) {
+            Object.assign(request.headers, reqHeaders)
           }
         })
       }
@@ -249,6 +257,9 @@ export default function VideoPlayer({ channel }) {
         }
         const msg =
           err.code === 6007  ? 'DRM licence request failed. Key may be wrong.' :
+          err.code === 6001  ? 'DRM init failed — ClearKey config issue.' :
+          err.code === 6002  ? 'DRM licence request failed.' :
+          err.code === 6003  ? 'DRM licence rejected — key mismatch.' :
           err.code === 1001  ? 'Network error — CDN unreachable.' :
           err.code === 1002  ? 'Network timeout — check your connection.' :
           err.code === 3016  ? 'Stream expired — update the token in channels.js.' :
@@ -319,6 +330,10 @@ export default function VideoPlayer({ channel }) {
           if (isCancelled) return
           const msg =
             err.code === 6007  ? 'DRM key mismatch — check clearKey in channels.js.' :
+            err.code === 6001  ? 'DRM init failed — ClearKey config issue.' :
+            err.code === 6002  ? 'DRM licence request failed.' :
+            err.code === 6003  ? 'DRM licence rejected — key mismatch.' :
+            err.code === 4001  ? 'Stream failed — invalid manifest format.' :
             err.code === 1001  ? 'Network error — CDN unreachable.' :
             err.code === 3016  ? 'Segment fetch failed — token may be expired.' :
                                  `Stream failed (${err.code ?? err.message}).`

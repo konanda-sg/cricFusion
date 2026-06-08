@@ -20,10 +20,10 @@ export default function Watch() {
   const playerRef = useRef(null)
   const mainRef   = useRef(null)
 
-  const channel = channels.find((c) => c.id === Number(id))
+  const channel = channels.find((c) => String(c.id) === id)
   const liked = favorites.includes(channel?.id)
-  const related = channels.filter((c) => c.id !== Number(id) && c.isLive).slice(0, 6)
-  const liveChannels = channels.filter((c) => c.isLive && c.id !== Number(id))
+  const related = channels.filter((c) => String(c.id) !== id && c.isLive).slice(0, 6)
+  const liveChannels = channels.filter((c) => c.isLive && String(c.id) !== id)
 
   useEffect(() => {
     if (channel) setCurrentChannel(channel)

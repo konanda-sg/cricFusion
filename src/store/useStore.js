@@ -3,6 +3,7 @@ import {
   CHANNEL_ORDER, STATIC_CHANNELS, mapApiChannel,
   DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel, mapSonyLivChannel,
 } from '../data/channels'
+import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 
 const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
@@ -79,6 +80,24 @@ export const useStore = create((set, get) => ({
     try { localStorage.setItem('cf_favorites', JSON.stringify(next)) } catch {}
     return { favorites: next }
   }),
+
+  // ── Custom M3U playlist ────────────────────────────────────────────────
+  m3uUrl: ls('cf_m3uUrl', ''),
+  setM3uUrl: (url) => {
+    try { localStorage.setItem('cf_m3uUrl', url) } catch {}
+    set({ m3uUrl: url, lastFetched: null })
+  },
+
+  // ── Tata Play credentials (OTP login) ─────────────────────────────────
+  tpCreds: (() => { try { return JSON.parse(localStorage.getItem('cf_tpCreds') || 'null') } catch { return null } })(),
+  setTpCreds: (creds) => {
+    try { localStorage.setItem('cf_tpCreds', JSON.stringify(creds)) } catch {}
+    set({ tpCreds: creds, lastFetched: null })
+  },
+  clearTpCreds: () => {
+    try { localStorage.removeItem('cf_tpCreds') } catch {}
+    set({ tpCreds: null, lastFetched: null })
+  },
 
   // ── Channels (loaded from API) ─────────────────────────────────────────
   channels: STATIC_CHANNELS,         // start with static; API channels prepended on load
@@ -159,8 +178,38 @@ export const useStore = create((set, get) => ({
         })
         .filter(Boolean)
 
+      // ── Tata Play (native OTP login — loads all channels from API) ────────
+      let tpApiChannels = []
+      const tpCreds = get().tpCreds
+      if (tpCreds?.subscriberId && tpCreds?.userAuthenticateToken) {
+        try {
+          const tpResp = await fetch(
+            `/api/tp-channels?sub=${encodeURIComponent(tpCreds.subscriberId)}&tok=${encodeURIComponent(tpCreds.userAuthenticateToken)}`
+          )
+          const tpData = await tpResp.json()
+          tpApiChannels = tpData.channels || []
+        } catch (e) {
+          console.warn('Tata Play channels load failed:', e)
+        }
+      }
+
+      // ── Custom M3U playlist (fallback for non-TP IPTV sources) ────────────
+      let m3uChannels = []
+      const m3uUrl = get().m3uUrl
+      if (m3uUrl) {
+        try {
+          const text = await fetch(`/api/m3u-proxy?url=${encodeURIComponent(m3uUrl)}`).then((r) => r.text())
+          const parsed = parseM3u(text)
+          m3uChannels = parsed
+            .filter((ch) => !tpApiChannels.length || !ch.licenseServer?.includes('tp.drmlive-01.workers.dev'))
+            .map((ch, i) => mapM3uChannel(ch, 400 + i + 1))
+        } catch (e) {
+          console.warn('M3U load failed:', e)
+        }
+      }
+
       set({
-        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fanCodeChannels, ...sonyLivChannels],
+        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels],
         channelsLoading: false,
         lastFetched: Date.now(),
       })

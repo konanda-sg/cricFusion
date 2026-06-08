@@ -283,13 +283,14 @@ export const STATIC_CHANNELS = [
 
 export const categories = [
   { id: 'all',         label: 'Trending',     icon: '🔥' },
-  { id: 'fancode',    label: 'FanCode',      icon: '⚡' },
-  { id: 'sonyliv',    label: 'Sony LIV',     icon: '📺' },
-  { id: 'cricket',    label: 'Cricket',      icon: '🏏' },
-  { id: 'football',   label: 'Football',     icon: '⚽' },
-  { id: 'tennis',     label: 'Tennis',       icon: '🎾' },
-  { id: 'basketball', label: 'Basketball',   icon: '🏀' },
-  { id: 'formula1',   label: 'Formula 1',    icon: '🏎️' },
-  { id: 'boxing',     label: 'Boxing',       icon: '🥊' },
-  { id: 'multi',      label: 'Multi Sports', icon: '🎯' },
+  { id: 'fancode',     label: 'FanCode',      icon: '⚡' },
+  { id: 'sonyliv',     label: 'Sony LIV',     icon: '📺' },
+  { id: 'tataplay',    label: 'Tata Play',    icon: '📡' },
+  { id: 'cricket',     label: 'Cricket',      icon: '🏏' },
+  { id: 'football',    label: 'Football',     icon: '⚽' },
+  { id: 'tennis',      label: 'Tennis',       icon: '🎾' },
+  { id: 'basketball',  label: 'Basketball',   icon: '🏀' },
+  { id: 'formula1',    label: 'Formula 1',    icon: '🏎️' },
+  { id: 'boxing',      label: 'Boxing',       icon: '🥊' },
+  { id: 'multi',       label: 'Multi Sports', icon: '🎯' },
 ]

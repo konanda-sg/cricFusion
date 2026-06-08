@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sun, Moon, RefreshCw, Tv2, Bell, BellOff, Shield, Info,
-  ChevronRight, LogOut, Heart, X, Check, Zap,
+  ChevronRight, LogOut, Heart, X, Check, Zap, List, Save,
+  Satellite, Smartphone, KeyRound,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
@@ -141,12 +142,72 @@ export default function Account() {
     refreshChannels, channelsLoading, channels,
     notificationsEnabled, toggleNotifications,
     preferredQuality, setPreferredQuality,
+    m3uUrl, setM3uUrl,
+    tpCreds, setTpCreds, clearTpCreds,
   } = useStore()
 
   const [showQuality, setShowQuality]   = useState(false)
   const [showPrivacy, setShowPrivacy]   = useState(false)
   const [showVersion, setShowVersion]   = useState(false)
+  const [showPlaylist, setShowPlaylist] = useState(false)
+  const [showTpLogin, setShowTpLogin]   = useState(false)
   const [notifBlocked, setNotifBlocked] = useState(false)
+  const [m3uInput, setM3uInput]         = useState(m3uUrl)
+  const [m3uSaved, setM3uSaved]         = useState(false)
+
+  // ── Tata Play OTP login state ─────────────────────────────────────────
+  const [tpMobile, setTpMobile]     = useState('')
+  const [tpOtp, setTpOtp]           = useState('')
+  const [tpStep, setTpStep]         = useState('mobile') // 'mobile' | 'otp' | 'done'
+  const [tpDevice, setTpDevice]     = useState(null)     // { deviceId, anonymousId }
+  const [tpLoading, setTpLoading]   = useState(false)
+  const [tpMsg, setTpMsg]           = useState('')
+
+  const tpSendOtp = async () => {
+    if (!/^[6-9]\d{9}$/.test(tpMobile)) { setTpMsg('Enter a valid 10-digit mobile number'); return }
+    setTpLoading(true); setTpMsg('')
+    try {
+      const r = await fetch('/api/tp-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile: tpMobile }) })
+      const data = await r.json()
+      if (!r.ok) { setTpMsg(data.error || 'Failed to send OTP'); return }
+      setTpDevice({ deviceId: data.deviceId, anonymousId: data.anonymousId })
+      setTpMsg(data.message || 'OTP sent!')
+      setTpStep('otp')
+    } catch (e) { setTpMsg('Network error') } finally { setTpLoading(false) }
+  }
+
+  const tpVerifyOtp = async () => {
+    if (!tpOtp || tpOtp.length < 4) { setTpMsg('Enter the OTP'); return }
+    setTpLoading(true); setTpMsg('')
+    try {
+      const r = await fetch('/api/tp-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: tpMobile, otp: tpOtp, ...tpDevice }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setTpMsg(data.error || 'Login failed'); return }
+      setTpCreds({ subscriberId: data.subscriberId, userAuthenticateToken: data.userAuthenticateToken })
+      setTpMsg('Logged in! Refreshing channels…')
+      setTpStep('done')
+      setTimeout(() => { refreshChannels(); setShowTpLogin(false) }, 1200)
+    } catch (e) { setTpMsg('Network error') } finally { setTpLoading(false) }
+  }
+
+  const tpLogout = () => {
+    clearTpCreds()
+    setTpStep('mobile'); setTpMobile(''); setTpOtp(''); setTpMsg(''); setTpDevice(null)
+    refreshChannels()
+  }
+
+  const saveM3uUrl = () => {
+    setM3uUrl(m3uInput.trim())
+    setM3uSaved(true)
+    setTimeout(() => setM3uSaved(false), 2000)
+    setTimeout(() => setShowPlaylist(false), 600)
+  }
+
+  const tpChannelCount = channels.filter((c) => c.key?.startsWith('tp_')).length
 
   const liveCount = channels.filter((c) => c.isLive).length
 
@@ -205,6 +266,41 @@ export default function Account() {
         )}
       </Section>
 
+      {/* Tata Play */}
+      <Section title="Tata Play">
+        {tpCreds ? (
+          <>
+            <div className="px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-brand-500/15 flex items-center justify-center flex-shrink-0">
+                <Satellite size={18} className="text-brand-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">Logged in</p>
+                <p className="text-white/40 text-xs mt-0.5 truncate">{tpCreds.subscriberId}</p>
+              </div>
+              <span className="text-brand-500 text-xs font-bold bg-brand-500/15 px-2 py-0.5 rounded-full flex-shrink-0">
+                {tpChannelCount} ch
+              </span>
+            </div>
+            <Divider />
+            <Row
+              icon={LogOut}
+              label="Sign out of Tata Play"
+              onClick={tpLogout}
+              accent="red"
+            />
+          </>
+        ) : (
+          <Row
+            icon={Satellite}
+            label="Login with Tata Play"
+            value="OTP"
+            onClick={() => { setTpStep('mobile'); setTpMsg(''); setShowTpLogin(true) }}
+            accent="lime"
+          />
+        )}
+      </Section>
+
       {/* Channels */}
       <Section title="Channels">
         <Row
@@ -221,6 +317,14 @@ export default function Account() {
           value={preferredQuality}
           onClick={() => setShowQuality(true)}
           accent="purple"
+        />
+        <Divider />
+        <Row
+          icon={List}
+          label="Custom Playlist (M3U)"
+          value={m3uUrl ? 'Configured' : 'Not set'}
+          onClick={() => { setM3uInput(m3uUrl); setShowPlaylist(true) }}
+          accent="blue"
         />
       </Section>
 
@@ -306,6 +410,141 @@ export default function Account() {
             title="Service Worker"
             body="A service worker proxies stream requests to protect source URLs. No request data is logged, stored, or shared."
           />
+        </div>
+      </BottomSheet>
+
+      {/* ── Tata Play Login Sheet ── */}
+      <BottomSheet open={showTpLogin} onClose={() => setShowTpLogin(false)} title="Tata Play Login">
+        <div className="px-5 py-4 pb-8 space-y-4">
+          <p className="text-white/40 text-[13px] leading-relaxed">
+            Login with any Indian mobile number. All Tata Play channels load directly in CricFusion — no external server needed.
+          </p>
+
+          <AnimatePresence mode="wait">
+            {tpStep === 'mobile' && (
+              <motion.div key="mobile" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-white/50 text-[11px] font-semibold uppercase tracking-wider">Mobile Number</label>
+                  <div className="flex items-center bg-dark-900 border border-white/[0.1] rounded-xl overflow-hidden focus-within:border-brand-500/60 transition-colors">
+                    <span className="px-3 text-white/40 text-sm font-medium border-r border-white/[0.08] py-3">+91</span>
+                    <input
+                      type="tel" maxLength={10} value={tpMobile}
+                      onChange={(e) => setTpMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      onKeyDown={(e) => e.key === 'Enter' && tpSendOtp()}
+                      placeholder="9XXXXXXXXX"
+                      className="flex-1 bg-transparent px-3 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none"
+                      autoComplete="tel" inputMode="numeric"
+                    />
+                  </div>
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.97 }} onClick={tpSendOtp} disabled={tpLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm text-black disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, rgba(200,255,0,0.9) 0%, rgba(160,220,0,0.95) 100%)' }}
+                >
+                  {tpLoading ? 'Sending…' : <><Smartphone size={15} />Send OTP</>}
+                </motion.button>
+              </motion.div>
+            )}
+
+            {tpStep === 'otp' && (
+              <motion.div key="otp" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
+                <div className="flex items-center gap-2 text-white/50 text-[13px]">
+                  <span>OTP sent to</span>
+                  <span className="text-white font-semibold">+91 {tpMobile}</span>
+                  <button onClick={() => setTpStep('mobile')} className="ml-auto text-brand-400 text-xs hover:text-brand-300">Change</button>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-white/50 text-[11px] font-semibold uppercase tracking-wider">Enter OTP</label>
+                  <input
+                    type="tel" maxLength={6} value={tpOtp}
+                    onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 6); setTpOtp(v); if (v.length >= 4) setTimeout(() => {}, 50) }}
+                    onKeyDown={(e) => e.key === 'Enter' && tpVerifyOtp()}
+                    placeholder="• • • • • •"
+                    autoFocus
+                    className="w-full bg-dark-900 border border-white/[0.1] rounded-xl px-4 py-3 text-white text-center text-xl tracking-[0.5em] placeholder:tracking-normal placeholder:text-white/20 focus:outline-none focus:border-brand-500/60 transition-colors"
+                    inputMode="numeric"
+                  />
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.97 }} onClick={tpVerifyOtp} disabled={tpLoading}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm text-black disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, rgba(200,255,0,0.9) 0%, rgba(160,220,0,0.95) 100%)' }}
+                >
+                  {tpLoading ? 'Verifying…' : <><KeyRound size={15} />Verify OTP</>}
+                </motion.button>
+              </motion.div>
+            )}
+
+            {tpStep === 'done' && (
+              <motion.div key="done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-4 gap-3">
+                <div className="w-14 h-14 rounded-full bg-brand-500/20 flex items-center justify-center">
+                  <Check size={28} className="text-brand-500" />
+                </div>
+                <p className="text-white font-bold text-base">Logged in!</p>
+                <p className="text-white/40 text-sm text-center">Loading Tata Play channels…</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {tpMsg ? (
+            <p className={`text-[13px] text-center ${tpMsg.includes('success') || tpMsg.includes('sent') || tpMsg.includes('Logged') ? 'text-brand-400' : 'text-red-400'}`}>
+              {tpMsg}
+            </p>
+          ) : null}
+
+          <p className="text-white/20 text-[11px] text-center leading-relaxed">
+            Works with any Indian mobile — no Tata Play subscription required for login.
+          </p>
+        </div>
+      </BottomSheet>
+
+      {/* ── Custom Playlist Sheet ── */}
+      <BottomSheet open={showPlaylist} onClose={() => setShowPlaylist(false)} title="Custom Playlist (M3U)">
+        <div className="px-5 py-4 pb-6 space-y-4">
+          <p className="text-white/40 text-[13px] leading-relaxed">
+            Enter an M3U/M3U8 playlist URL. Supports Tata Play and any IPTV playlist with DASH or HLS streams.
+          </p>
+          <div className="space-y-1">
+            <label className="text-white/50 text-[11px] font-semibold uppercase tracking-wider">Playlist URL</label>
+            <input
+              type="url"
+              value={m3uInput}
+              onChange={(e) => setM3uInput(e.target.value)}
+              onFocus={() => setM3uSaved(false)}
+              placeholder="https://your-proxy.example.com/playlist.m3u"
+              className="w-full bg-dark-900 border border-white/[0.1] rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-brand-500/60 transition-colors"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          {m3uUrl && (
+            <button
+              onClick={() => { setM3uInput(''); setM3uUrl('') }}
+              className="text-red-400/60 text-xs hover:text-red-400 transition-colors"
+            >
+              Clear saved playlist
+            </button>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={saveM3uUrl}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm transition-colors"
+            style={{
+              background: m3uSaved
+                ? 'rgba(100,220,100,0.15)'
+                : 'linear-gradient(135deg, rgba(200,255,0,0.85) 0%, rgba(160,220,0,0.9) 100%)',
+              color: m3uSaved ? 'rgba(100,220,100,0.9)' : '#000',
+            }}
+          >
+            {m3uSaved
+              ? <><Check size={15} /> Saved — refresh channels to load</>
+              : <><Save size={15} /> Save Playlist</>
+            }
+          </motion.button>
+          <p className="text-white/20 text-[11px] leading-relaxed text-center">
+            Channels load under the "Tata Play" tab. Playlist is fetched fresh each session.
+          </p>
         </div>
       </BottomSheet>
 
