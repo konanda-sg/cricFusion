@@ -41,6 +41,9 @@ export default function VideoPlayer({ channel }) {
   const { preferredQuality } = useStore()
 
   const [streamTracks, setStreamTracks] = useState([])   // detected text tracks from stream
+  const [castAvailable, setCastAvailable]   = useState(false)
+  const [casting, setCasting]               = useState(false)
+  const [airPlayAvailable, setAirPlayAvailable] = useState(false)
 
   const [state, setState] = useState({
     playing: false,
@@ -78,6 +81,84 @@ export default function VideoPlayer({ channel }) {
       liveRef.current = next
       return next
     })
+  }, [])
+
+  // ── Chromecast init ───────────────────────────────────────────────────
+  useEffect(() => {
+    const init = () => {
+      try {
+        const { cast, chrome } = window
+        cast.framework.CastContext.getInstance().setOptions({
+          receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+        })
+        cast.framework.CastContext.getInstance().addEventListener(
+          cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+          (e) => {
+            const active =
+              e.sessionState === cast.framework.SessionState.SESSION_STARTED ||
+              e.sessionState === cast.framework.SessionState.SESSION_RESUMED
+            setCasting(active)
+          }
+        )
+        setCastAvailable(true)
+      } catch {}
+    }
+    if (window.__castReady) init()
+    else window.addEventListener('castready', init, { once: true })
+    return () => window.removeEventListener('castready', init)
+  }, [])
+
+  // ── AirPlay availability ──────────────────────────────────────────────
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const handler = (e) => setAirPlayAvailable(e.availability === 'available')
+    v.addEventListener('webkitplaybacktargetavailabilitychanged', handler)
+    return () => v.removeEventListener('webkitplaybacktargetavailabilitychanged', handler)
+  }, [])
+
+  const startCast = useCallback(async () => {
+    if (!channel?.url) return
+    try {
+      const { cast, chrome } = window
+      const ctx = cast.framework.CastContext.getInstance()
+      if (ctx.getSessionState() === cast.framework.SessionState.NO_SESSION) {
+        await ctx.requestSession()
+      }
+      const session = ctx.getCurrentSession()
+      if (!session) return
+
+      const url = channel.url.startsWith('/')
+        ? `${window.location.origin}${channel.url}`
+        : channel.url
+      const mimeType = url.includes('.mpd') ? 'application/dash+xml' : 'application/x-mpegURL'
+
+      const mediaInfo = new chrome.cast.media.MediaInfo(url, mimeType)
+      mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata()
+      mediaInfo.metadata.title = channel.name || 'CricFusion'
+      mediaInfo.metadata.subtitle = channel.currentMatch || ''
+      if (channel.thumbnail) mediaInfo.metadata.images = [new chrome.cast.Image(channel.thumbnail)]
+
+      await session.loadMedia(new chrome.cast.media.LoadRequest(mediaInfo))
+    } catch (err) {
+      console.warn('[cast]', err)
+    }
+  }, [channel])
+
+  const stopCast = useCallback(async () => {
+    try {
+      const session = window.cast?.framework.CastContext.getInstance().getCurrentSession()
+      if (session) await session.endSession(true)
+    } catch {}
+  }, [])
+
+  const toggleCast = useCallback(() => {
+    casting ? stopCast() : startCast()
+  }, [casting, startCast, stopCast])
+
+  const toggleAirPlay = useCallback(() => {
+    videoRef.current?.webkitShowPlaybackTargetPicker?.()
   }, [])
 
   // ── Initialise player ─────────────────────────────────────────────────
@@ -503,6 +584,11 @@ export default function VideoPlayer({ channel }) {
     }, 3000)
   }, [])
 
+  // Auto-hide controls once playback begins (critical for mobile — no mousemove events)
+  useEffect(() => {
+    if (state.playing) showControlsTemporarily()
+  }, [state.playing]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => () => {
     clearTimeout(hideTimer.current)
     clearTimeout(seekIndicatorTimer.current)
@@ -758,7 +844,7 @@ export default function VideoPlayer({ channel }) {
           filter: `brightness(${state.brightness})${state.enhance ? ' contrast(1.1) saturate(1.15)' : ''}`,
           transformOrigin: 'center',
         }}
-        playsInline preload="auto"
+        playsInline preload="auto" x-webkit-airplay="allow"
       />
 
       {/* Loading spinner */}
@@ -785,6 +871,23 @@ export default function VideoPlayer({ channel }) {
               <p className="text-white font-semibold text-base">{state.error}</p>
               <p className="text-white/40 text-sm">Stream tokens expire after ~6 hours.<br />Update the URL in channels.js with a fresh token.</p>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Casting overlay */}
+      <AnimatePresence>
+        {casting && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 pointer-events-none z-10"
+          >
+            <svg className="w-16 h-16 text-brand-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
+              <line x1="2" y1="20" x2="2.01" y2="20"/>
+            </svg>
+            <p className="text-white font-semibold text-sm">Casting to TV</p>
+            <p className="text-white/50 text-xs mt-1">{channel?.name}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -931,6 +1034,11 @@ export default function VideoPlayer({ channel }) {
               subtitleActive={state.subtitleMode !== null}
               objectFit={state.objectFit}
               onFitChange={cycleFit}
+              castAvailable={castAvailable}
+              casting={casting}
+              onCast={toggleCast}
+              airPlayAvailable={airPlayAvailable}
+              onAirPlay={toggleAirPlay}
             />
           </motion.div>
         )}

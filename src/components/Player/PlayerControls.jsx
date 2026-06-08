@@ -9,11 +9,31 @@ import { formatTime } from '../../utils/formatTime'
 
 const FIT_CYCLE = { contain: 'Fit', cover: 'Crop', fill: 'Full' }
 
+function CastIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
+      <line x1="2" y1="20" x2="2.01" y2="20"/>
+    </svg>
+  )
+}
+
+function AirPlayIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/>
+      <polygon points="12 15 17 21 7 21 12 15"/>
+    </svg>
+  )
+}
+
 export default function PlayerControls({
   state, channel,
   onPlayPause, onSeek, onSeekTo, onVolume, onMute,
   onFullscreen, onPIP, onGoLive, onToggleQuality, onLock,
   objectFit, onFitChange, subtitleActive,
+  castAvailable, casting, onCast,
+  airPlayAvailable, onAirPlay,
 }) {
   const { playing, muted, volume, currentTime, duration, buffered, fullscreen, isLive } = state
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -231,6 +251,20 @@ export default function PlayerControls({
           >
             {FIT_CYCLE[objectFit] ?? 'Fit'}
           </motion.button>
+
+          {/* AirPlay — Safari only, shows when an Apple device is detected */}
+          {airPlayAvailable && (
+            <ControlBtn onClick={onAirPlay} title="AirPlay to Apple TV / Mac">
+              <AirPlayIcon size={15} />
+            </ControlBtn>
+          )}
+
+          {/* Chromecast — shows once Cast SDK detects a device */}
+          {castAvailable && (
+            <ControlBtn onClick={onCast} title={casting ? 'Stop casting' : 'Cast to TV'} active={casting}>
+              <CastIcon size={15} />
+            </ControlBtn>
+          )}
 
           {/* Lock controls */}
           <ControlBtn onClick={onLock} title="Lock controls">

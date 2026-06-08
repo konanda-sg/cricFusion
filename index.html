@@ -28,6 +28,10 @@
 
     <!-- Shaka Player for DASH/MPD + ClearKey DRM streams -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.min.js"></script>
+
+    <!-- Google Cast SDK — dispatches 'castready' when available -->
+    <script>window['__onGCastApiAvailable']=function(ok){if(ok){window.__castReady=true;window.dispatchEvent(new Event('castready'))}}</script>
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1" async></script>
   </head>
   <body class="bg-black">
     <div id="root"></div>

@@ -18,6 +18,7 @@ export default function Watch() {
   const [copied, setCopied] = useState(false)
   const sharePanelRef = useRef(null)
   const playerRef = useRef(null)
+  const mainRef   = useRef(null)
 
   const channel = channels.find((c) => c.id === Number(id))
   const liked = favorites.includes(channel?.id)
@@ -29,12 +30,12 @@ export default function Watch() {
     return () => setCurrentChannel(null)
   }, [channel])
 
-  // On mobile, scroll the player into view after the route transition settles
+  // On mobile, scroll the page to the very top after navigation
   useEffect(() => {
     if (!channel || window.innerWidth >= 768) return
     const t = setTimeout(() => {
-      playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 200)
+      mainRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+    }, 50)
     return () => clearTimeout(t)
   }, [channel?.id])
 
@@ -98,7 +99,7 @@ export default function Watch() {
       {/* Desktop sidebar */}
       <Sidebar currentChannelId={channel.id} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main ref={mainRef} className="flex-1 overflow-y-auto">
         <div className="p-3 md:p-5 max-w-5xl mx-auto space-y-4">
           {/* Back */}
           <motion.button
