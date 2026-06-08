@@ -128,10 +128,10 @@ function tpApiDevProxy() {
         const qs = new URL(url, 'http://localhost')
 
         try {
-          // Use absolute file:// URL so import() resolves correctly even when
-          // vite.config.js is compiled to a temp directory by esbuild.
+          // Absolute file:// URL + timestamp query busts Node's ESM module cache so
+          // edits to api/*.js files take effect without restarting the dev server.
           const handlerName = url.split('?')[0].replace('/api/', '')
-          const handlerUrl = pathToFileURL(nodePath.join(process.cwd(), 'api', handlerName + '.js')).href
+          const handlerUrl = pathToFileURL(nodePath.join(process.cwd(), 'api', handlerName + '.js')).href + `?t=${Date.now()}`
           const mod = await import(handlerUrl)
           const fakeReq = { method: req.method, query: Object.fromEntries(qs.searchParams), body, headers: req.headers }
           const fakeRes = {

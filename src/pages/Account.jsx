@@ -91,8 +91,8 @@ function BottomSheet({ open, onClose, title, children }) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 38 }}
-            className="fixed bottom-0 left-0 right-0 bg-dark-800 rounded-t-3xl z-50 border-t border-white/[0.06]"
-            style={{ maxHeight: '82vh' }}
+            className="fixed bottom-16 md:bottom-0 left-0 right-0 bg-dark-800 rounded-t-3xl z-[55] border-t border-white/[0.06]"
+            style={{ maxHeight: 'calc(82vh - 4rem)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
@@ -105,7 +105,7 @@ function BottomSheet({ open, onClose, title, children }) {
                 <X size={15} className="text-white/60" />
               </motion.button>
             </div>
-            <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: 'calc(82vh - 64px)' }}>
+            <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: 'calc(82vh - 4rem - 64px)' }}>
               {children}
             </div>
           </motion.div>

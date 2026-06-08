@@ -91,20 +91,17 @@ function rewriteMpd(text, baseUrl, pssh) {
 
   if (!pssh) return out
 
-  // Only inject cenc:default_KID if not already present (avoid duplicate XML attributes)
+  // Remove Widevine (edef8ba9) and PlayReady (9a04f079) ContentProtection elements.
+  // Shaka prefers Widevine when present and throws NO_LICENSE_SERVER_GIVEN (6012)
+  // since we only support ClearKey. Removing them forces Shaka to use our ClearKey entry.
+  out = out.replace(/<ContentProtection[^>]*(?:edef8ba9|9a04f079)[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
+
+  // Only inject cenc:default_KID into mp4protection if not already present
   if (pssh.kid && !text.includes('cenc:default_KID')) {
     out = out.replace('mp4protection:2011"', `mp4protection:2011" cenc:default_KID="${pssh.kid}"`)
   }
 
-  // Replace self-closing PlayReady/Widevine entries with ones containing PSSH
-  if (pssh.prPssh) {
-    out = out.replace('" value="PlayReady"/>', `"><cenc:pssh>${pssh.prPssh}</cenc:pssh></ContentProtection>`)
-  }
-  if (pssh.wvPssh) {
-    out = out.replace('" value="Widevine"/>', `"><cenc:pssh>${pssh.wvPssh}</cenc:pssh></ContentProtection>`)
-  }
-
-  // Add ClearKey ContentProtection so Shaka can use org.w3.clearkey
+  // Inject ClearKey ContentProtection before the first remaining ContentProtection
   if (pssh.kid) {
     const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${pssh.kid}</cenc:default_KID></ContentProtection>`
     out = out.replace('<ContentProtection', `${ck}\n        <ContentProtection`)
