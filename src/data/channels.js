@@ -219,6 +219,10 @@ function sonyLivLogo(channel) {
 export function mapSonyLivChannel(match, id) {
   const lang = match.audioLanguageName || 'ENG'
   const url  = toSlProxy(match.dai_url || match.pub_url || match.video_url)
+  const baseId = (match.contentId || '').split('_')[0]
+  const sonyLivUrl = baseId
+    ? `https://www.sonyliv.com/live/${baseId}`
+    : 'https://www.sonyliv.com/sports'
   return {
     id,
     key:          `sl_${match.contentId}`,
@@ -236,6 +240,7 @@ export function mapSonyLivChannel(match, id) {
     url,
     clearKey:     null,
     quality:      ['Auto', '1080p', '720p', '480p'],
+    sonyLivUrl,
   }
 }
 

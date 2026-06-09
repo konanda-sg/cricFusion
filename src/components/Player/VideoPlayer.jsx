@@ -20,6 +20,51 @@ function extractToken(url) {
   return match ? match[1] : null
 }
 
+// Strips Widevine PSSH boxes from binary MP4 init segments.
+// Shaka reads PSSH boxes from init segments and tries to initialise the matching
+// CDM (Widevine = edef8ba9-…). Removing them prevents the Widevine CDM attempt
+// while leaving the encryption parameters intact for ClearKey.
+function stripWidevinePssh(input) {
+  try {
+    const src = input instanceof ArrayBuffer
+      ? new Uint8Array(input)
+      : new Uint8Array(input.buffer, input.byteOffset ?? 0, input.byteLength)
+
+    const u32 = (a, i) => ((a[i] << 24) | (a[i+1] << 16) | (a[i+2] << 8) | a[i+3]) >>> 0
+
+    function process(a, start, end) {
+      const chunks = []; let pos = start
+      while (pos + 8 <= end) {
+        const sz = u32(a, pos)
+        if (sz < 8 || pos + sz > end) break
+        const t = String.fromCharCode(a[pos+4], a[pos+5], a[pos+6], a[pos+7])
+        // Skip Widevine PSSH: system ID at pos+12 starts with ed ef 8b a9
+        if (t === 'pssh' && sz >= 28 &&
+            a[pos+12] === 0xed && a[pos+13] === 0xef && a[pos+14] === 0x8b && a[pos+15] === 0xa9) {
+          pos += sz; continue
+        }
+        // Recurse into moov to catch nested PSSH
+        if (t === 'moov') {
+          const inner = process(a, pos + 8, pos + sz)
+          const nSz = 8 + inner.length
+          const box = new Uint8Array(nSz)
+          box[0] = (nSz >>> 24) & 0xFF; box[1] = (nSz >>> 16) & 0xFF
+          box[2] = (nSz >>> 8) & 0xFF;  box[3] = nSz & 0xFF
+          box[4] = 0x6D; box[5] = 0x6F; box[6] = 0x6F; box[7] = 0x76  // 'moov'
+          box.set(inner, 8); chunks.push(box); pos += sz; continue
+        }
+        chunks.push(a.slice(pos, pos + sz)); pos += sz
+      }
+      let total = 0; for (const c of chunks) total += c.length
+      const out = new Uint8Array(total); let off = 0
+      for (const c of chunks) { out.set(c, off); off += c.length }
+      return out
+    }
+
+    return process(src, 0, src.length).buffer
+  } catch { return input }
+}
+
 export default function VideoPlayer({ channel }) {
   const videoRef    = useRef(null)
   const hlsRef      = useRef(null)
@@ -227,6 +272,7 @@ export default function VideoPlayer({ channel }) {
           servers: { [isWv ? 'com.widevine.alpha' : 'org.w3.clearkey']: channel.licenseServer },
         }
       }
+
       player.configure(cfg)
 
       // Request filter: token injection + custom headers (e.g. Tata Play CDN)
@@ -241,6 +287,48 @@ export default function VideoPlayer({ channel }) {
           }
           if (reqHeaders) {
             Object.assign(request.headers, reqHeaders)
+          }
+        })
+      }
+
+      // ClearKey channels: two-phase response filter.
+      // MANIFEST phase: strip Widevine/PlayReady XML + inject ClearKey ContentProtection.
+      // SEGMENT phase:  strip Widevine PSSH boxes from binary MP4 init segments so Shaka
+      //   does not fall back to the Widevine CDM when it reads the segment's DRM metadata.
+      if (channel.drmSystem === 'clearkey') {
+        player.getNetworkingEngine().registerResponseFilter((type, response) => {
+          const MT = shaka.net.NetworkingEngine.RequestType.MANIFEST
+          const ST = shaka.net.NetworkingEngine.RequestType.SEGMENT
+
+          if (type === MT) {
+            try {
+              let text = new TextDecoder('utf-8', { fatal: false }).decode(response.data)
+              const kidMatch = text.match(/default_KID="\{?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}?"/i)
+              const kid = kidMatch?.[1]?.toLowerCase() ?? null
+              text = text.replace(/<ContentProtection[^>]*edef8ba9[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
+              text = text.replace(/<ContentProtection[^>]*9a04f079[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
+              text = text.replace(/<(?:\w+:)?pssh[^>]*>[\s\S]*?<\/(?:\w+:)?pssh>/gi, '')
+              if (kid && !text.includes('e2719d58-a985-b3c9-781a-b030af78d30e')) {
+                const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>`
+                text = text.includes('<ContentProtection')
+                  ? text.replace(/<ContentProtection/g, `${ck}\n        <ContentProtection`)
+                  : text.replace(/<Representation/g, `${ck}\n        <Representation`)
+              }
+              response.data = new TextEncoder().encode(text).buffer
+            } catch (e) { console.error('[CK manifest filter]', e) }
+
+          } else if (type === ST) {
+            // Quick scan for 'pssh' bytes (0x70 0x73 0x73 0x68) before doing full parse
+            const raw = new Uint8Array(response.data instanceof ArrayBuffer
+              ? response.data : response.data.buffer)
+            const limit = Math.min(raw.length, 65536)
+            let hasPssh = false
+            for (let j = 0; j < limit - 4; j++) {
+              if (raw[j] === 0x70 && raw[j+1] === 0x73 && raw[j+2] === 0x73 && raw[j+3] === 0x68) {
+                hasPssh = true; break
+              }
+            }
+            if (hasPssh) response.data = stripWidevinePssh(response.data)
           }
         })
       }
@@ -398,6 +486,9 @@ export default function VideoPlayer({ channel }) {
             hls.stopLoad()
             hls.loadSource(channel.fallbackUrl)
             hls.startLoad()
+          } else if (channel.sonyLivUrl) {
+            // Sony LIV proxy is IP-blocked by Akamai — don't retry, show watch link
+            update({ error: 'Stream unavailable via proxy.', loading: false })
           } else {
             update({ error: 'Stream error. Retrying…', loading: false })
             hlsRetryTimer = setTimeout(() => {
@@ -882,11 +973,26 @@ export default function VideoPlayer({ channel }) {
       <AnimatePresence>
         {state.error && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none">
+            className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center space-y-3 px-6">
               <div className="text-5xl">📡</div>
               <p className="text-white font-semibold text-base">{state.error}</p>
-              <p className="text-white/40 text-sm">Stream tokens expire after ~6 hours.<br />Update the URL in channels.js with a fresh token.</p>
+              {channel?.sonyLivUrl ? (
+                <div className="space-y-2">
+                  <p className="text-white/40 text-sm">Stream unavailable via proxy.</p>
+                  <a
+                    href={channel.sonyLivUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-[#0057FF] hover:bg-[#0046cc] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                    Watch on Sony LIV
+                  </a>
+                </div>
+              ) : (
+                <p className="text-white/40 text-sm">Stream tokens expire after ~6 hours.<br />Update the URL in channels.js with a fresh token.</p>
+              )}
             </div>
           </motion.div>
         )}
