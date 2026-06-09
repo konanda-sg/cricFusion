@@ -443,18 +443,7 @@ export default function VideoPlayer({ channel }) {
     const canNativeSafariHLS = video.canPlayType('application/vnd.apple.mpegurl') !== ''
     const useSafariNative = isHLS && channel.originalUrl && canNativeSafariHLS
     if (isHLS && Hls.isSupported() && !useSafariNative) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90,
-        // Sony LIV: Akamai always 403s from cloud IPs — no point retrying
-        ...(channel.sonyLivUrl && {
-          manifestLoadingMaxRetry: 0,
-          levelLoadingMaxRetry: 0,
-          fragLoadingMaxRetry: 0,
-          manifestLoadingTimeOut: 8000,
-        }),
-      })
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 90 })
       hlsRef.current = hls
       hls.loadSource(channel.url)
       hls.attachMedia(video)
@@ -494,14 +483,9 @@ export default function VideoPlayer({ channel }) {
         update({ quality: stored?.label ?? 'Auto' })
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
-        // Sony LIV: manifest blocked by Akamai (403 on cloud IP) — show link immediately
-        // Only intercept manifest-load failures, not transient fragment/buffer errors.
-        if (
-          channel.sonyLivUrl &&
-          d.type === Hls.ErrorTypes.NETWORK_ERROR &&
-          (d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
-            d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT)
-        ) {
+        // Sony LIV on prod: Akamai returns HTTP 403 for cloud IPs.
+        // Check the actual response code so local dev (Akamai returns 200) is unaffected.
+        if (channel.sonyLivUrl && d.response?.code === 403) {
           update({ error: 'Stream unavailable via proxy.', loading: false })
           hls.stopLoad()
           return
