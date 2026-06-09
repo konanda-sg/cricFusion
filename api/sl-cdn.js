@@ -10,6 +10,10 @@ export const config = { runtime: 'edge' }
 // Set via environment variables: PROXY_URL (e.g., http://user:pass@proxy-host:port)
 const RESIDENTIAL_PROXY = process.env.PROXY_URL || null
 
+// Free CORS proxy fallback — used when direct fetch fails with 403
+// allorigins.win is reliable, free, and doesn't require API keys
+const CORS_PROXY = 'https://api.allorigins.win/raw?url='
+
 function proxyAkamaiUrl(url, hdnea) {
   let out = url
   if (out.startsWith('https://sonydaimenew.akamaized.net/')) {
@@ -72,8 +76,6 @@ export default async function handler(req) {
 
   let upstreamResp
   try {
-    // If residential proxy configured, route through it; otherwise direct fetch
-    const fetchUrl = RESIDENTIAL_PROXY ? `${RESIDENTIAL_PROXY}?url=${encodeURIComponent(upstream)}` : upstream
     const headers = {
       'accept': '*/*',
       'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
@@ -92,10 +94,19 @@ export default async function handler(req) {
       ...(clientIp && !RESIDENTIAL_PROXY && { 'x-forwarded-for': clientIp }),
     }
 
-    upstreamResp = await fetch(fetchUrl, {
+    // Try direct fetch first
+    upstreamResp = await fetch(upstream, {
       signal: abort.signal,
       headers,
     })
+
+    // If 403 (Akamai IP block) and no residential proxy configured, try free CORS proxy
+    if (upstreamResp.status === 403 && !RESIDENTIAL_PROXY) {
+      clearTimeout(abortTimer)
+      const corsUrl = CORS_PROXY + encodeURIComponent(upstream)
+      upstreamResp = await fetch(corsUrl, { signal: abort.signal })
+    }
+
     clearTimeout(abortTimer)
   } catch (err) {
     clearTimeout(abortTimer)
