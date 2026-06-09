@@ -6,15 +6,9 @@
 
 export const config = { runtime: 'edge' }
 
-// Residential proxy configuration for Akamai CDN bypass
+// Residential proxy configuration for Akamai CDN bypass (optional, paid service)
 // Set via environment variables: PROXY_URL (e.g., http://user:pass@proxy-host:port)
 const RESIDENTIAL_PROXY = process.env.PROXY_URL || null
-
-// Free CORS proxy fallbacks — try multiple services if one is down
-const CORS_PROXIES = [
-  'https://api.codetabs.com/v1/proxy?quest=',  // codetabs.com proxy
-  'https://cors-anywhere.herokuapp.com/',       // cors-anywhere proxy
-]
 
 function proxyAkamaiUrl(url, hdnea) {
   let out = url
@@ -96,33 +90,10 @@ export default async function handler(req) {
       ...(clientIp && !RESIDENTIAL_PROXY && { 'x-forwarded-for': clientIp }),
     }
 
-    // Try direct fetch first
     upstreamResp = await fetch(upstream, {
       signal: abort.signal,
       headers,
     })
-
-    // If 403 (Akamai IP block) and no residential proxy configured, try free CORS proxies
-    if (upstreamResp.status === 403 && !RESIDENTIAL_PROXY) {
-      clearTimeout(abortTimer)
-      let proxySuccess = false
-      for (const corsProxy of CORS_PROXIES) {
-        try {
-          const corsUrl = corsProxy + encodeURIComponent(upstream)
-          const corsResp = await fetch(corsUrl, { signal: abort.signal })
-          if (corsResp.ok) {
-            upstreamResp = corsResp
-            proxySuccess = true
-            break
-          }
-        } catch {}
-      }
-      if (!proxySuccess) {
-        // All proxies failed, return 403 to trigger error overlay
-        upstreamResp = new Response('Akamai IP blocked; proxies unavailable', { status: 403 })
-      }
-    }
-
     clearTimeout(abortTimer)
   } catch (err) {
     clearTimeout(abortTimer)
