@@ -504,8 +504,10 @@ export default function VideoPlayer({ channel }) {
       }
     }
 
-    // ── Native fallback ──
-    video.src = channel.url
+    // ── Native fallback (Safari HLS) ──
+    // Use the original Akamai URL for Sony LIV on Safari — native <video>
+    // doesn't enforce CORS, so it plays directly from Akamai without proxy.
+    video.src = channel.originalUrl || channel.url
     video.play().catch(() => {})
     update({ loading: false })
   }, [channel?.url, channel?.clearKey?.keyId])

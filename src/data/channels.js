@@ -218,7 +218,8 @@ function sonyLivLogo(channel) {
 
 export function mapSonyLivChannel(match, id) {
   const lang = match.audioLanguageName || 'ENG'
-  const url  = toSlProxy(match.dai_url || match.pub_url || match.video_url)
+  const originalUrl = match.dai_url || match.pub_url || match.video_url
+  const url  = toSlProxy(originalUrl)
   const baseId = (match.contentId || '').split('_')[0]
   const sonyLivUrl = baseId
     ? `https://www.sonyliv.com/live/${baseId}`
@@ -238,6 +239,7 @@ export function mapSonyLivChannel(match, id) {
     description:  `${match.event_name} — ${match.broadcast_channel || 'Sony LIV'}`,
     score:        null,
     url,
+    originalUrl,  // direct Akamai URL — used by Safari native HLS (no CORS restriction)
     clearKey:     null,
     quality:      ['Auto', '1080p', '720p', '480p'],
     sonyLivUrl,
