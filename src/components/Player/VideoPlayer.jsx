@@ -507,8 +507,21 @@ export default function VideoPlayer({ channel }) {
           }
         }
       })
+      // Safety net: if nothing happens after 15 s (no manifest, no error, no play)
+      // the proxy is likely hanging. Show an actionable error instead of spinning forever.
+      const stuckTimer = setTimeout(() => {
+        if (isCancelled || liveRef.current.playing || liveRef.current.error) return
+        if (channel.sonyLivUrl) {
+          update({ error: 'Stream unavailable via proxy.', loading: false })
+        } else {
+          update({ error: 'Stream failed to load. Try refreshing.', loading: false })
+        }
+        if (hlsRef.current) hlsRef.current.stopLoad()
+      }, 15000)
+
       return () => {
         isCancelled = true
+        clearTimeout(stuckTimer)
         clearTimeout(hlsRetryTimer)
         if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
       }

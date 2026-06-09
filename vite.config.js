@@ -57,8 +57,11 @@ function sonyLivDevProxy() {
         let hdnea = ''
         try { hdnea = new URL(upstream).searchParams.get('hdnea') || '' } catch {}
 
+        const proxyAbort = new AbortController()
+        const proxyTimeout = setTimeout(() => proxyAbort.abort(), 10000)
         try {
           const r = await fetch(upstream, {
+            signal: proxyAbort.signal,
             headers: {
               'accept': '*/*',
               'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
@@ -77,6 +80,7 @@ function sonyLivDevProxy() {
               ...(req.headers['range'] && { 'range': req.headers['range'] }),
             },
           })
+          clearTimeout(proxyTimeout)
 
           const ct = r.headers.get('content-type') || 'application/octet-stream'
           res.setHeader('Access-Control-Allow-Origin', '*')
