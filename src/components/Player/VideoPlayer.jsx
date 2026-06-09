@@ -224,8 +224,6 @@ export default function VideoPlayer({ channel }) {
       } else if (channel.licenseServer) {
         cfg.drm = {
           servers: { 'org.w3.clearkey': channel.licenseServer },
-          // Remap Widevine → ClearKey so in-band Widevine PSSH boxes found in
-          // init segments don't cause Shaka to request a missing Widevine server (6012)
           keySystemsMapping: { 'com.widevine.alpha': 'org.w3.clearkey' },
         }
       }

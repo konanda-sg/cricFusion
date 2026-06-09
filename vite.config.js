@@ -165,9 +165,18 @@ function tpLicenseDevProxy() {
         if (req.method === 'OPTIONS') return res.end()
         const id = new URL(req.url, 'http://localhost').searchParams.get('id')
         if (!id) { res.statusCode = 400; return res.end('Missing id') }
+        // Read body — Shaka POSTs a ClearKey JWKS request: {"kids":[...],"type":"temporary"}
+        let body = '{}'
+        if (req.method === 'POST') {
+          body = await new Promise((resolve) => {
+            const chunks = []; req.on('data', (c) => chunks.push(c)); req.on('end', () => resolve(Buffer.concat(chunks).toString()))
+          })
+        }
         try {
           const r = await fetch(`https://tp.drmlive-01.workers.dev?id=${encodeURIComponent(id)}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://watch.tataplay.com', 'Referer': 'https://watch.tataplay.com/' },
+            method: 'POST',
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://watch.tataplay.com', 'Referer': 'https://watch.tataplay.com/', 'Content-Type': 'application/json' },
+            body,
           })
           const json = await r.json()
           res.setHeader('Content-Type', 'application/json')
@@ -199,8 +208,11 @@ function tpMpdProxyDev() {
           const kidMatch = text.match(/cenc:default_KID="([0-9a-f-]{36})"/i)
           if (kidMatch) {
             const kid = kidMatch[1]
-            const ckEntry = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>`
-            text = text.replace('<ContentProtection', ckEntry + '\n        <ContentProtection')
+            // Strip Widevine and PlayReady, inject ClearKey before EVERY mp4protection
+            text = text.replace(/<ContentProtection[^>]*(?:edef8ba9|9a04f079)[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
+            const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>\n        `
+            text = text.replace(/<ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection/g,
+              `${ck}<ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection`)
           }
           res.setHeader('Content-Type', 'application/dash+xml')
           res.setHeader('Cache-Control', 'no-cache')

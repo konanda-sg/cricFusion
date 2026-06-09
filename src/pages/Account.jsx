@@ -205,7 +205,7 @@ export default function Account() {
     setM3uUrl(m3uInput.trim())
     setM3uSaved(true)
     setTimeout(() => setM3uSaved(false), 2000)
-    setTimeout(() => setShowPlaylist(false), 600)
+    setTimeout(() => { setShowPlaylist(false); refreshChannels() }, 700)
   }
 
   const tpChannelCount = channels.filter((c) => c.key?.startsWith('tp_')).length
@@ -521,7 +521,7 @@ export default function Account() {
           </div>
           {m3uUrl && (
             <button
-              onClick={() => { setM3uInput(''); setM3uUrl('') }}
+              onClick={() => { setM3uInput(''); setM3uUrl(''); setTimeout(refreshChannels, 100) }}
               className="text-red-400/60 text-xs hover:text-red-400 transition-colors"
             >
               Clear saved playlist

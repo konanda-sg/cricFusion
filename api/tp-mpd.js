@@ -1,10 +1,9 @@
 // Full port of get-mpd.php:
 // 1. Calls Tata Play content API with subscriber auth to get encrypted MPD URL
 // 2. Decrypts URL via AES-128-ECB
-// 3. Follows redirect to capture hdntl CDN auth cookie
-// 4. Fetches the MPD with tataplay.com headers
-// 5. Extracts Widevine PSSH → calls tp.secure-kid.workers.dev for KID
-// 6. Rewrites manifest: injects cenc:default_KID, PSSH blobs, ClearKey system ID
+// 3. Follows ALL Akamai CDN redirects (redirect:follow) to get final URL + MPD
+// 4. Extracts Widevine PSSH → calls tp.secure-kid.workers.dev for KID
+// 5. Rewrites manifest: strips Widevine/PlayReady, injects ClearKey system ID
 import crypto from 'crypto'
 
 const UA    = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
@@ -19,7 +18,9 @@ function decryptUrl(encryptedUrl) {
   return Buffer.concat([decipher.update(decoded), decipher.final()]).toString()
 }
 
-async function resolveMpdUrl(id, subscriberId, token) {
+// Returns { mpdUrl, mpdText } — fetches the MPD exactly once to avoid
+// consuming a single-use Akamai token on a dry redirect-only request.
+async function fetchMpd(id, subscriberId, token) {
   const contentApi = `https://tb.tapi.videoready.tv/content-detail/api/partner/cdn/player/details/chotiluli/${id}`
   const r = await fetch(contentApi, {
     headers: { 'Authorization': `Bearer ${token}`, 'subscriberId': subscriberId },
@@ -30,29 +31,21 @@ async function resolveMpdUrl(id, subscriberId, token) {
   let url = decryptUrl(data.data.dashPlayreadyPlayUrl)
   url = url.replace('bpaita', 'bpaicatchupta').replace('manifest', 'Manifest')
 
-  if (!url.includes('bpaicatchupta')) return url
-
-  // Follow redirect (don't auto-follow) to capture hdntl CDN token from Set-Cookie
-  const redir = await fetch(url, {
-    redirect: 'manual',
-    headers: { 'User-Agent': UA, 'Accept': '*/*', 'Connection': 'close' },
+  // Follow all CDN redirects automatically. response.url is the final URL
+  // (with full ?hdntl=... and any other Akamai parameters intact — old code
+  // split on & which stripped required params and caused 403 on segments).
+  const mpdResp = await fetch(url, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent': UA,
+      'Accept': '*/*',
+      'Referer': 'https://watch.tataplay.com/',
+      'Origin': 'https://watch.tataplay.com',
+    },
   })
+  if (!mpdResp.ok) throw new Error(`CDN fetch failed: ${mpdResp.status}`)
 
-  const setCookie = redir.headers.get('set-cookie') || ''
-  const hdntlMatch = setCookie.match(/hdntl=([^;]+)/)
-  if (hdntlMatch) {
-    return `${url.split('?')[0]}?hdntl=${hdntlMatch[1]}`
-  }
-
-  const hdntlHeader = redir.headers.get('hdntl')
-  if (hdntlHeader) {
-    return `${url.split('?')[0]}?hdntl=${hdntlHeader}`
-  }
-
-  const location = redir.headers.get('location')
-  if (location) return location.split('&')[0]
-
-  return url
+  return { mpdUrl: mpdResp.url || url, mpdText: await mpdResp.text() }
 }
 
 async function extractPssh(mpdText) {
@@ -124,14 +117,8 @@ export default async function handler(req, res) {
   if (!token)          return res.status(401).end('Missing ?tok=')
 
   try {
-    const mpdUrl = await resolveMpdUrl(id, subscriberId, token)
+    const { mpdUrl, mpdText } = await fetchMpd(id, subscriberId, token)
 
-    const mpdResp = await fetch(mpdUrl, {
-      headers: { 'User-Agent': UA, 'Referer': WATCH + '/', 'Origin': WATCH },
-    })
-    if (!mpdResp.ok) return res.status(mpdResp.status).end('MPD fetch failed')
-
-    const mpdText = await mpdResp.text()
     const baseUrl = mpdUrl.substring(0, mpdUrl.lastIndexOf('/'))
     const pssh = await extractPssh(mpdText)
     const processed = rewriteMpd(mpdText, baseUrl, pssh)
