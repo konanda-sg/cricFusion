@@ -494,8 +494,14 @@ export default function VideoPlayer({ channel }) {
         update({ quality: stored?.label ?? 'Auto' })
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
-        // Sony LIV: ANY error = Akamai blocked the cloud proxy — show link right away
-        if (channel.sonyLivUrl) {
+        // Sony LIV: manifest blocked by Akamai (403 on cloud IP) — show link immediately
+        // Only intercept manifest-load failures, not transient fragment/buffer errors.
+        if (
+          channel.sonyLivUrl &&
+          d.type === Hls.ErrorTypes.NETWORK_ERROR &&
+          (d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+            d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT)
+        ) {
           update({ error: 'Stream unavailable via proxy.', loading: false })
           hls.stopLoad()
           return
@@ -507,6 +513,8 @@ export default function VideoPlayer({ channel }) {
             hls.stopLoad()
             hls.loadSource(channel.fallbackUrl)
             hls.startLoad()
+          } else if (channel.sonyLivUrl) {
+            update({ error: 'Stream unavailable via proxy.', loading: false })
           } else {
             update({ error: 'Stream error. Retrying…', loading: false })
             hlsRetryTimer = setTimeout(() => {
