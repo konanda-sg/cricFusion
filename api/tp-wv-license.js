@@ -14,15 +14,46 @@ function decryptUrl(encryptedUrl) {
   return Buffer.concat([decipher.update(decoded), decipher.final()]).toString()
 }
 
-async function getWvLicenseUrl(id, subscriberId, token) {
+async function getContentData(id, subscriberId, token) {
   const contentApi = `https://tb.tapi.videoready.tv/content-detail/api/partner/cdn/player/details/chotiluli/${id}`
   const r = await fetch(contentApi, {
     headers: { 'Authorization': `Bearer ${token}`, 'subscriberId': subscriberId },
   })
-  const data = await r.json()
-  const enc = data?.data?.dashWidevineLicenseUrl
-  if (!enc) throw new Error('dashWidevineLicenseUrl not found in content API response')
-  return decryptUrl(enc)
+  return r.json()
+}
+
+async function getDrmToken(id, subscriberId, token) {
+  // Tata Play may have a dedicated DRM token endpoint that returns a signed JWT
+  // for Irdeto entitlement validation. Try the most likely path.
+  try {
+    const r = await fetch(
+      `https://tb.tapi.videoready.tv/content-detail/api/partner/cdn/player/drm-token/${id}`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'subscriberId': subscriberId } }
+    )
+    if (r.ok) {
+      const d = await r.json()
+      const t = d?.data?.token || d?.data?.drmToken || d?.data?.jwt || d?.token
+      if (t && t.includes('.')) return t  // JWT has dots
+    }
+  } catch {}
+  return null
+}
+
+async function getWvLicenseUrl(id, subscriberId, token) {
+  const data = await getContentData(id, subscriberId, token)
+
+  // Tata Play API spells it "Widewine" (their typo for Widevine)
+  const wvEnc = data?.data?.dashWidewineLicenseUrl || data?.data?.dashWidevineLicenseUrl
+  if (wvEnc) return decryptUrl(wvEnc)
+
+  // Fallback: derive from PlayReady URL (same Irdeto server, only path differs)
+  const prEnc = data?.data?.dashPlayreadyLicenseUrl
+  if (prEnc) {
+    const prUrl = decryptUrl(prEnc)
+    return prUrl.replace('/playready/rightsmanager.asmx', '/Widevine/getlicense')
+  }
+
+  throw new Error(`No Widevine/PlayReady license URL in API. Keys: ${JSON.stringify(Object.keys(data?.data || {}))}`)
 }
 
 export default async function handler(req, res) {
@@ -46,17 +77,25 @@ export default async function handler(req, res) {
   if (!challenge.length) return res.status(400).end('Empty Widevine challenge')
 
   try {
-    const wvUrl = await getWvLicenseUrl(id, subscriberId, token)
-    console.log('[tp-wv-license] forwarding to:', wvUrl)
+    const [wvUrl, drmToken] = await Promise.all([
+      getWvLicenseUrl(id, subscriberId, token),
+      getDrmToken(id, subscriberId, token),
+    ])
+
+    // Build auth headers — try DRM JWT first, fall back to subscriber auth token
+    const authToken = drmToken || token
+    console.log('[tp-wv-license] forwarding to:', wvUrl, '| drmToken:', drmToken ? 'yes' : 'no')
 
     const r = await fetch(wvUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'User-Agent':   UA,
-        'Origin':       'https://watch.tataplay.com',
-        'Referer':      'https://watch.tataplay.com/',
-        'Accept':       '*/*',
+        'Content-Type':  'application/octet-stream',
+        'User-Agent':    UA,
+        'Origin':        'https://watch.tataplay.com',
+        'Referer':       'https://watch.tataplay.com/',
+        'Accept':        '*/*',
+        'Authorization': `Bearer ${authToken}`,
+        'subscriberId':  subscriberId,
       },
       body: challenge,
     })

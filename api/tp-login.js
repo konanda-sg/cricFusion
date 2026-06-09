@@ -86,6 +86,8 @@ export default async function handler(req, res) {
       body: JSON.stringify(loginBody),
     })
     const loginData = await loginResp.json()
+    console.log('[tp-login] step3 data keys:', JSON.stringify(Object.keys(loginData?.data || {})))
+    console.log('[tp-login] step3 data:', JSON.stringify(loginData?.data))
 
     const subscriberId = loginData.data?.subscriberId || loginBody.subscriberId
     const userAuthenticateToken = loginData.data?.userAuthenticateToken || token
@@ -94,6 +96,8 @@ export default async function handler(req, res) {
       message: loginData.message || 'Logged in successfully',
       subscriberId,
       userAuthenticateToken,
+      // Return any JWT-like fields (contains dots = JWT format) so the client can store them
+      _loginData: loginData.data,
     })
   } catch (e) {
     return res.status(500).json({ error: e.message })
