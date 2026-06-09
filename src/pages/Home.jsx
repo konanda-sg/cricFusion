@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Heart } from 'lucide-react'
 import HeroSection from '../components/UI/HeroSection'
@@ -20,6 +20,8 @@ const TP_SECTIONS = [
 ]
 
 function TpGroupedView({ channels }) {
+  const [expanded, setExpanded] = useState(null)
+
   const grouped = useMemo(() => {
     const map = {}
     for (const ch of channels) {
@@ -44,24 +46,58 @@ function TpGroupedView({ channels }) {
 
   return (
     <div className="pb-6 space-y-6">
-      {sections.map((sec) => (
-        <div key={sec.id}>
-          <div className="flex items-center gap-2 px-4 md:px-6 mb-3">
-            <span className="text-base leading-none">{sec.icon}</span>
-            <span className="text-white font-bold text-sm">{sec.label}</span>
-            <span className="text-[10px] bg-white/[0.07] text-white/40 px-1.5 py-0.5 rounded-full font-semibold">
-              {grouped[sec.id].length}
-            </span>
-          </div>
-          <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 md:px-6 pb-1">
-            {grouped[sec.id].map((ch, i) => (
-              <div key={ch.id} className="flex-shrink-0 w-44">
-                <ChannelCard channel={ch} index={i} />
+      {sections.map((sec) => {
+        const isExpanded = expanded === sec.id
+        const list = grouped[sec.id]
+        return (
+          <div key={sec.id}>
+            {/* Section header */}
+            <div className="flex items-center gap-2 px-4 md:px-6 mb-3">
+              <span className="text-base leading-none">{sec.icon}</span>
+              <span className="text-white font-bold text-sm">{sec.label}</span>
+              <span className="text-[10px] bg-white/[0.07] text-white/40 px-1.5 py-0.5 rounded-full font-semibold">
+                {list.length}
+              </span>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setExpanded(isExpanded ? null : sec.id)}
+                className="ml-auto text-[12px] font-semibold text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1"
+              >
+                {isExpanded ? 'Collapse' : 'See all'}
+                <motion.span
+                  animate={{ rotate: isExpanded ? 90 : 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  className="inline-block"
+                >›</motion.span>
+              </motion.button>
+            </div>
+
+            {/* Horizontal scroll row */}
+            {!isExpanded && (
+              <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 md:px-6 pb-1">
+                {list.map((ch, i) => (
+                  <div key={ch.id} className="flex-shrink-0 w-44">
+                    <ChannelCard channel={ch} index={i} />
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Expanded grid */}
+            {isExpanded && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 px-4 md:px-6"
+              >
+                {list.map((ch, i) => (
+                  <ChannelCard key={ch.id} channel={ch} index={i} />
+                ))}
+              </motion.div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
