@@ -81,6 +81,18 @@ const FIFA_STREAMS = [
     keyId:  '549ab7cd35a64bb6bb479ecead04d69d',
     drmKey: '829799ed534d11fcadeb4b192467e050',
   },
+  {
+    id: 307,
+    key: 'fifa_united_sports_1',
+    name: 'United Sports 1 HD',
+    match: 'FIFA World Cup 2026 — Live',
+    logo: 'US1',
+    language: 'English',
+    description: 'FIFA World Cup 2026 — United Sports 1 HD',
+    url: 'https://sundirectgo-live.pc.cdn.bitgravity.com/svchd18/dth.mpd',
+    keyId:  '521f18ae33645cabdd064c1d3732556a',
+    drmKey: 'c67544333910f31f7e8c7ebfbc8b1876',
+  },
 ]
 
 export default function handler(req, res) {
