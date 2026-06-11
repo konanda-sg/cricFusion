@@ -236,6 +236,13 @@ export default function VideoPlayer({ channel }) {
 
     // ── DASH / MPD via Shaka Player ──
     if (isMPD) {
+      // Safari doesn't support DASH or ClearKey DRM — show a clear message immediately
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+      if (isSafari && channel.clearKey) {
+        update({ error: 'Safari does not support encrypted DASH streams. Please use Chrome or Firefox.', loading: false })
+        return
+      }
+
       const shaka = window.shaka
       if (!shaka) {
         update({ error: 'Shaka Player not loaded. Check your connection.', loading: false })
