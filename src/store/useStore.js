@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import {
-  CHANNEL_ORDER, STATIC_CHANNELS, FIFA_CHANNELS, mapApiChannel,
+  CHANNEL_ORDER, STATIC_CHANNELS, mapApiChannel,
   DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel, mapSonyLivChannel,
+  mapFifaChannel,
 } from '../data/channels'
 import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
@@ -11,6 +12,7 @@ const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
 const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?id=...
 const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-events
 const SONYLIV_PROXY = '/cf-sonyliv'   // SW → github drmlive/sliv-live-events
+const FIFA_PROXY    = '/cf-fifa'      // SW → /api/cf-fifa (server-side, Referer-locked)
 
 // SW base64-encodes responses; decode back to JSON string.
 // Falls back to plain JSON when SW is active but an old SW version fell
@@ -18,14 +20,12 @@ const SONYLIV_PROXY = '/cf-sonyliv'   // SW → github drmlive/sliv-live-events
 function decode(text, swActive) {
   if (!text || text === 'error') return null
   try {
-    if (swActive) {
-      try {
-        return JSON.parse(decodeURIComponent(escape(atob(text.trim()))))
-      } catch {
-        return JSON.parse(text)
-      }
+    // Always try base64 first (SW encodes all responses); fall back to raw JSON
+    try {
+      return JSON.parse(decodeURIComponent(escape(atob(text.trim()))))
+    } catch {
+      return JSON.parse(text)
     }
-    return JSON.parse(text)
   } catch {
     return null
   }
@@ -101,7 +101,7 @@ export const useStore = create((set, get) => ({
   },
 
   // ── Channels (loaded from API) ─────────────────────────────────────────
-  channels: [...STATIC_CHANNELS, ...FIFA_CHANNELS],  // start with static; API channels prepended on load
+  channels: [...STATIC_CHANNELS],  // start with static; FIFA + API channels loaded at runtime
   channelsLoading: false,
   channelsError: null,
   lastFetched: null,
@@ -123,16 +123,18 @@ export const useStore = create((set, get) => ({
     const batchUrl  = swActive ? PROXY : 'https://jtvv.pages.dev/channels.json'
     const fanCodeUrl = swActive ? FANCODE_PROXY : 'https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json'
     const sonyLivUrl = swActive ? SONYLIV_PROXY : 'https://raw.githubusercontent.com/drmlive/sliv-live-events/main/sonyliv.json'
+    const fifaUrl   = FIFA_PROXY  // always via SW or direct — no public fallback (Referer-locked)
     const dynUrl    = (id) => swActive
       ? `${DYNAMIC_PROXY}?id=${id}`
       : `https://newwwwapiiiiii.vercel.app/main?id=${id}`
 
     try {
       // Fire all APIs in parallel — SW proxies so real URLs stay hidden
-      const [batchResult, fanCodeResult, sonyLivResult, ...dynamicResults] = await Promise.allSettled([
+      const [batchResult, fanCodeResult, sonyLivResult, fifaResult, ...dynamicResults] = await Promise.allSettled([
         fetch(batchUrl).then((r) => r.text()),
         fetch(fanCodeUrl).then((r) => r.text()),
         fetch(sonyLivUrl).then((r) => r.text()),
+        fetch(fifaUrl).then((r) => r.text()),
         ...DYNAMIC_CHANNEL_IDS.map((id) => fetch(dynUrl(id)).then((r) => r.text())),
       ])
 
@@ -167,6 +169,13 @@ export const useStore = create((set, get) => ({
         sonyLivChannels = (json?.matches || [])
           .filter((m) => m.isLive && (m.dai_url || m.pub_url || m.video_url))
           .map((m, i) => mapSonyLivChannel(m, 300 + i + 1))
+      }
+
+      // ── FIFA 2026 streams (server-side, Referer-locked) ───────────────
+      let fifaChannels = []
+      if (fifaResult.status === 'fulfilled') {
+        const json = decode(fifaResult.value, swActive)
+        fifaChannels = (Array.isArray(json) ? json : []).map(mapFifaChannel)
       }
 
       // ── Per-channel dynamic channels ───────────────────────────────────
@@ -211,10 +220,17 @@ export const useStore = create((set, get) => ({
         }
       }
 
+      const allChannels = [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fifaChannels, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels]
+      const seen = new Set()
+      const deduped = allChannels.filter((ch) => {
+        if (seen.has(ch.key)) return false
+        seen.add(ch.key)
+        return true
+      })
       set({
-        channels: [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...FIFA_CHANNELS, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels],
+        channels: deduped,
         channelsLoading: false,
-        lastFetched: Date.now(),
+        lastFetched:     Date.now(),
       })
     } catch (err) {
       console.error('Failed to load channels:', err)

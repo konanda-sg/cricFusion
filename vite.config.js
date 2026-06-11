@@ -105,6 +105,36 @@ function sonyLivDevProxy() {
   }
 }
 
+// Dev-time proxy for /api/cf-fifa — runs the Vercel handler locally
+function fifaDevProxy() {
+  return {
+    name: 'fifa-api-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/cf-fifa')) return next()
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end() }
+        try {
+          const handlerUrl = pathToFileURL(nodePath.join(process.cwd(), 'api', 'cf-fifa.js')).href + `?t=${Date.now()}`
+          const mod = await import(handlerUrl)
+          const fakeReq = { method: req.method, headers: { referer: 'http://localhost:5173' } }
+          const fakeRes = {
+            _status: 200,
+            status(c) { this._status = c; return this },
+            end(b) { res.statusCode = this._status; res.end(b) },
+            json(b) { res.setHeader('Content-Type', 'application/json'); res.statusCode = this._status; res.end(JSON.stringify(b)) },
+            setHeader(k, v) { res.setHeader(k, v) },
+          }
+          await mod.default(fakeReq, fakeRes)
+        } catch (e) {
+          console.error('[fifa-api-dev]', e)
+          res.statusCode = 500; res.end('dev error: ' + e.message)
+        }
+      })
+    },
+  }
+}
+
 // Dev-time proxies for Tata Play OTP login + channel/MPD APIs
 // These forward requests to the same external APIs the Vercel functions call.
 function tpApiDevProxy() {
@@ -354,7 +384,7 @@ function m3uDevProxy() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), sonyLivDevProxy(), m3uDevProxy(), tpLicenseDevProxy(), tpWvLicenseDevProxy(), tpMpdProxyDev(), tpApiDevProxy()],
+  plugins: [react(), sonyLivDevProxy(), m3uDevProxy(), tpLicenseDevProxy(), tpWvLicenseDevProxy(), tpMpdProxyDev(), tpApiDevProxy(), fifaDevProxy()],
   server: {
     proxy: {
       '/cf-sonyliv': {

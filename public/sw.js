@@ -60,6 +60,17 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // ── FIFA 2026 streams (clearKeys + URLs served server-side) ─────────────
+  if (url.pathname === '/cf-fifa') {
+    event.respondWith(
+      fetch('/api/cf-fifa', { cache: 'no-store', credentials: 'omit' })
+        .then((r) => r.text())
+        .then(makeResponse)
+        .catch(() => new Response('error', { status: 502 }))
+    )
+    return
+  }
+
   // ── Per-channel dynamic fetch ─────────────────────────────────────────────
   if (url.pathname === '/cf-dynamic') {
     const id = url.searchParams.get('id')
