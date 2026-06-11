@@ -387,8 +387,14 @@ export default function VideoPlayer({ channel }) {
 
         const tryPlay = () => {
           video.play().catch((err) => {
-            if (err.name === 'AbortError' && !isCancelled) {
+            if (isCancelled) return
+            if (err.name === 'AbortError') {
               video.addEventListener('canplay', () => { if (!isCancelled) video.play().catch(() => {}) }, { once: true })
+            } else if (err.name === 'NotAllowedError') {
+              // iOS blocks unmuted autoplay — start muted so video plays, user can unmute via controls
+              video.muted = true
+              update({ muted: true })
+              video.play().catch(() => {})
             }
           })
         }
@@ -462,9 +468,13 @@ export default function VideoPlayer({ channel }) {
         const levels = Object.values(bestByKey).sort((a, b) => (a.height ?? 0) - (b.height ?? 0))
         update({ qualityLevels: [{ id: -1, label: 'Auto' }, ...levels], loading: false })
         video.play().catch((err) => {
-          // MediaSource not ready yet — wait for canplay then retry
-          if (err.name === 'AbortError' && !isCancelled) {
+          if (isCancelled) return
+          if (err.name === 'AbortError') {
             video.addEventListener('canplay', () => { if (!isCancelled) video.play().catch(() => {}) }, { once: true })
+          } else if (err.name === 'NotAllowedError') {
+            video.muted = true
+            update({ muted: true })
+            video.play().catch(() => {})
           }
         })
       })
