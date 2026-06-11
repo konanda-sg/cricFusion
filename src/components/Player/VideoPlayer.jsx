@@ -65,6 +65,20 @@ function stripWidevinePssh(input) {
   } catch { return input }
 }
 
+// Derive an HLS URL from a DASH MPD URL for Safari native playback.
+// Amazon IVS and CMAF CDNs always expose parallel HLS endpoints.
+function deriveSafariHlsUrl(mpd) {
+  if (!mpd) return null
+  // Amazon IVS: /clients/dash/enc/.../cenc.mpd → /clients/hls/enc/.../index.m3u8
+  if (mpd.includes('/clients/dash/enc/')) {
+    return mpd.replace('/clients/dash/enc/', '/clients/hls/enc/').replace(/\/cenc\.mpd$/, '/index.m3u8')
+  }
+  // Generic CMAF: master.mpd → master.m3u8, index.mpd → index.m3u8
+  if (mpd.endsWith('master.mpd')) return mpd.replace('master.mpd', 'master.m3u8')
+  if (mpd.endsWith('index.mpd'))  return mpd.replace('index.mpd',  'index.m3u8')
+  return null
+}
+
 export default function VideoPlayer({ channel }) {
   const videoRef    = useRef(null)
   const hlsRef      = useRef(null)
@@ -236,10 +250,17 @@ export default function VideoPlayer({ channel }) {
 
     // ── DASH / MPD via Shaka Player ──
     if (isMPD) {
-      // Safari doesn't support DASH or ClearKey DRM — show a clear message immediately
+      // Safari doesn't support DASH or ClearKey DRM — use HLS fallback derived from MPD URL
       const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-      if (isSafari && channel.clearKey) {
-        update({ error: 'Safari does not support encrypted DASH streams. Please use Chrome or Firefox.', loading: false })
+      if (isSafari) {
+        const safariUrl = channel.safariUrl || deriveSafariHlsUrl(channel.url)
+        if (safariUrl) {
+          video.src = safariUrl
+          video.play().catch(() => { video.muted = true; update({ muted: true }); video.play().catch(() => {}) })
+          update({ loading: false, isLive: true })
+          return
+        }
+        update({ error: 'Safari does not support this stream. Please use Chrome or Firefox.', loading: false })
         return
       }
 
