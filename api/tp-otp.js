@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (!mobile || !/^[6-9]\d{9}$/.test(mobile)) {
     return res.status(400).json({ error: 'Invalid mobile number' })
   }
-
+//
   try {
     // Step 1: Register anonymous guest device
     const deviceId = String(Math.floor(Math.random() * 900 + 100)) + String(Date.now()) + String(Math.floor(Math.random() * 90 + 10))
