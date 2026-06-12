@@ -82,6 +82,18 @@ const FIFA_STREAMS = [
     drmKey: '829799ed534d11fcadeb4b192467e050',
   },
   {
+    id: 312,
+    key: 'fifa_sporza_hd',
+    name: 'Sporza HD',
+    match: 'Mexico vs South Africa — Live',
+    logo: 'SPZ',
+    language: 'Dutch',
+    description: 'FIFA World Cup 2026 — Sporza HD',
+    url: 'https://live.vrtcdn.be/groupd/live/0761024f-37fe-4254-bc37-e95d7c62b2d1/live.isml/.mpd',
+    keyId:  '893bc63340876605f52886a42e0ccce5',
+    drmKey: 'd6c46d2d691056fbd091bf1f01b21a91',
+  },
+  {
     id: 311,
     key: 'fifa_unifi_tv',
     name: 'Unifi TV',
