@@ -1,14 +1,17 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Home, Search, Trophy, UserCircle, LayoutGrid } from 'lucide-react'
+import { FEATURES } from '../../config/features'
 
-const TABS = [
-  { id: 'home',      label: 'Home',      icon: Home,        path: '/' },
-  { id: 'search',    label: 'Search',    icon: Search,      path: '/search' },
-  { id: 'multiview', label: 'Multi',     icon: LayoutGrid,  path: '/multiview' },
-  { id: 'sports',    label: 'Sports',    icon: Trophy,      path: '/sports' },
-  { id: 'account',   label: 'Account',   icon: UserCircle,  path: '/account' },
+const BASE_TABS = [
+  { id: 'home',      label: 'Home',    icon: Home,       path: '/' },
+  { id: 'search',    label: 'Search',  icon: Search,     path: '/search' },
+  { id: 'multiview', label: 'Multi',   icon: LayoutGrid, path: '/multiview', flag: 'MULTIVIEW' },
+  { id: 'sports',    label: 'Sports',  icon: Trophy,     path: '/sports' },
+  { id: 'account',   label: 'Account', icon: UserCircle, path: '/account' },
 ]
+
+const TABS = BASE_TABS.filter((t) => !t.flag || FEATURES[t.flag])
 
 export default function BottomNav() {
   const navigate     = useNavigate()

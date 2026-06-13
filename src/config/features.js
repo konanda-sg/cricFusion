@@ -1,4 +1,5 @@
-// Feature flags — flip TATAPLAY to false to hide the tab, skip API calls, and remove Account section.
+// Feature flags — flip to false to hide the feature across the app.
 export const FEATURES = {
-  TATAPLAY: true,
+  TATAPLAY:   true,
+  MULTIVIEW:  false,   // set true to enable the Multi-View page and bottom nav tab
 }

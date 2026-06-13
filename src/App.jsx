@@ -11,6 +11,7 @@ import Sports from './pages/Sports'
 import Account from './pages/Account'
 import Watch from './pages/Watch'
 import MultiView from './pages/MultiView'
+import { FEATURES } from './config/features'
 
 // Inner component so useLocation works inside BrowserRouter
 function AppContent() {
@@ -35,7 +36,7 @@ function AppContent() {
               <Route path="/sports"   element={<Sports />} />
               <Route path="/account"  element={<Account />} />
               <Route path="/watch/:id"   element={<Watch />} />
-              <Route path="/multiview"   element={<MultiView />} />
+              {FEATURES.MULTIVIEW && <Route path="/multiview" element={<MultiView />} />}
             </Routes>
           </motion.div>
         </AnimatePresence>
