@@ -179,6 +179,18 @@ const FIFA_STREAMS = [
     drmKey: '68f96d618b0b956b008c445896a25a79',
   },
   {
+    id: 316,
+    key: 'fifa_fussball_tv',
+    name: 'Fussball TV',
+    match: 'FIFA World Cup 2026 — Live',
+    logo: 'FBL',
+    language: 'German',
+    description: 'FIFA World Cup 2026 — Fussball TV',
+    url: 'https://svc45.main.sl.t-online.de/bpk-tv/KID01037_FUSSBALLTV1_hd/DASH/index.mpd',
+    keyId:  '1cb20afcd9d979c833cfd208c7d3eeb2',
+    drmKey: 'fef0c15b4a523370892edd5e4133c269',
+  },
+  {
     id: 307,
     key: 'fifa_united_sports_1',
     name: 'United Sports 1 HD',

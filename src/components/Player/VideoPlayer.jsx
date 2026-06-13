@@ -1063,7 +1063,7 @@ export default function VideoPlayer({ channel }) {
   return (
     <div
       ref={containerRef}
-      className={`relative w-full bg-black overflow-hidden select-none ${state.fullscreen ? 'h-screen' : ''}`}
+      className={`relative w-full bg-black overflow-hidden select-none ${state.fullscreen ? 'h-screen' : ''} ${state.playing && !state.showControls ? 'cursor-none' : ''}`}
       style={{ aspectRatio: state.fullscreen ? undefined : '16/9' }}
       onMouseMove={showControlsTemporarily}
       onMouseEnter={() => update({ showControls: true })}
