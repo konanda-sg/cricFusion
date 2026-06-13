@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../../store/useStore'
@@ -6,7 +7,12 @@ import { Users } from 'lucide-react'
 export default function Sidebar({ currentChannelId }) {
   const { isSidebarOpen, channels } = useStore()
   const navigate = useNavigate()
+  const activeRef = useRef(null)
   const liveChannels = channels.filter((c) => c.isLive)
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [currentChannelId])
 
   return (
     <AnimatePresence>
@@ -25,6 +31,7 @@ export default function Sidebar({ currentChannelId }) {
             {liveChannels.map((ch) => (
               <motion.button
                 key={ch.id}
+                ref={currentChannelId === ch.id ? activeRef : null}
                 whileHover={{ x: 4 }}
                 onClick={() => navigate(`/watch/${ch.id}`)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mx-1 transition-colors ${

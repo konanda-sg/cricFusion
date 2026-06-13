@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import Hls from 'hls.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Lock, LockOpen, Sun, Volume2 as VolumeSwipeIcon } from 'lucide-react'
+import { Lock, LockOpen, Sun, Volume2 as VolumeSwipeIcon, Wifi } from 'lucide-react'
 import PlayerControls from './PlayerControls'
 import SettingsMenu from './SettingsMenu'
 import SeekIndicator from './SeekIndicator'
@@ -79,6 +79,13 @@ function deriveSafariHlsUrl(mpd) {
   return null
 }
 
+function QualityWifi({ quality, actualHeight }) {
+  const h = actualHeight || parseInt(quality) || 0
+  const color = h >= 1080 ? '#22c55e' : h >= 720 ? '#84cc16' : h >= 480 ? '#f59e0b' : h > 0 ? '#ef4444' : '#ffffff40'
+  const tip = actualHeight && quality === 'Auto' ? `Auto · playing ${actualHeight}p` : `Stream quality: ${quality}`
+  return <Wifi size={14} style={{ color, transition: 'color 0.4s' }} title={tip} />
+}
+
 export default function VideoPlayer({ channel }) {
   const videoRef    = useRef(null)
   const hlsRef      = useRef(null)
@@ -117,6 +124,7 @@ export default function VideoPlayer({ channel }) {
     loading: true,
     error: null,
     quality: 'Auto',
+    actualHeight: 0,   // real playing height regardless of Auto/manual
     qualityLevels: [],
     showQualityMenu: false,
     enhance: false,
@@ -361,6 +369,11 @@ export default function VideoPlayer({ channel }) {
         })
       }
 
+      player.addEventListener('adaptation', () => {
+        const active = player.getVariantTracks().find((t) => t.active)
+        if (active?.height) update({ actualHeight: active.height })
+      })
+
       player.addEventListener('error', (e) => {
         const err = e.detail
         console.warn('Shaka error (severity', err?.severity, 'code', err?.code, ')', err)
@@ -409,6 +422,28 @@ export default function VideoPlayer({ channel }) {
           .filter(({ language }) => { if (seenLangs.has(language)) return false; seenLangs.add(language); return true })
           .map(({ language, role }) => ({ id: language, label: formatLangLabel(language), role }))
         const activeAudio = player.getAudioLanguage?.() ?? null
+
+        // Immediately lock to highest-bitrate variant — skip ABR warmup.
+        // ABR will re-engage if the user selects Auto later.
+        const allTracks = player.getVariantTracks()
+        const best = allTracks.reduce((a, b) => ((b.bandwidth ?? 0) > (a.bandwidth ?? 0) ? b : a), allTracks[0])
+        const shakaConn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+        const shakaDl = shakaConn?.downlink ?? 10
+        const shakaFast = shakaDl >= 4 || shakaConn?.effectiveType === '4g'
+        if (best && shakaFast) {
+          player.configure({ abr: { enabled: false } })
+          player.selectVariantTrack(best, true)
+          update({ actualHeight: best.height ?? 0 })
+          // Re-enable ABR after 8 s with a floor so it never drops more than one tier
+          setTimeout(() => {
+            if (!shakaRef.current) return
+            const minHeight = best.height ? Math.max(best.height - 360, 480) : 480
+            shakaRef.current.configure({
+              abr: { enabled: true },
+              restrictions: { minHeight },
+            })
+          }, 8000)
+        }
 
         // Stream is live — clear any stale error overlay immediately
         update({ qualityLevels: levels, loading: false, isLive: player.isLive(), error: null, audioTracks, audioTrack: activeAudio })
@@ -477,7 +512,21 @@ export default function VideoPlayer({ channel }) {
     const canNativeSafariHLS = video.canPlayType('application/vnd.apple.mpegurl') !== ''
     const useSafariNative = isHLS && channel.originalUrl && canNativeSafariHLS && !channel.sonyLivUrl
     if (isHLS && Hls.isSupported() && !useSafariNative) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 90 })
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+      const downlink = conn?.downlink ?? 10  // Mbps; assume fast if API unavailable
+      const isFast = downlink >= 4 || conn?.effectiveType === '4g'
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,
+        maxBufferLength: isFast ? 60 : 30,
+        maxMaxBufferLength: isFast ? 120 : 60,
+        abrEwmaDefaultEstimate: isFast ? 8_000_000 : 1_500_000,
+        abrBandWidthFactor: isFast ? 0.95 : 0.8,
+        abrBandWidthUpFactor: isFast ? 0.9 : 0.7,
+        capLevelToPlayerSize: false,
+      })
       hlsRef.current = hls
       hls.loadSource(channel.url)
       hls.attachMedia(video)
@@ -494,6 +543,19 @@ export default function VideoPlayer({ channel }) {
           }
         })
         const levels = Object.values(bestByKey).sort((a, b) => (a.height ?? 0) - (b.height ?? 0))
+
+        // On fast connections: jump to highest bitrate immediately, skip ABR warmup.
+        // On slow connections: let ABR start conservatively and ramp up naturally.
+        const netConn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+        const dl = netConn?.downlink ?? 10
+        const fastNet = dl >= 4 || netConn?.effectiveType === '4g'
+        if (fastNet) {
+          const maxBitrateIdx = data.levels.reduce((best, l, i) =>
+            (l.bitrate ?? 0) > (data.levels[best]?.bitrate ?? 0) ? i : best, 0)
+          hls.startLevel = maxBitrateIdx
+          hls.currentLevel = maxBitrateIdx
+        }
+
         update({ qualityLevels: [{ id: -1, label: 'Auto' }, ...levels], loading: false })
         video.play().catch((err) => {
           if (isCancelled) return
@@ -518,7 +580,8 @@ export default function VideoPlayer({ channel }) {
       hls.on(Hls.Events.LEVEL_LOADED, (_, d) => update({ isLive: !!d.details?.live }))
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, { level }) => {
         const stored = liveRef.current.qualityLevels.find((l) => l.id === level)
-        update({ quality: stored?.label ?? 'Auto' })
+        const actualHeight = data.levels?.[level]?.height ?? stored?.height ?? 0
+        update({ quality: stored?.label ?? 'Auto', actualHeight })
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
         // Sony LIV on prod: Akamai returns HTTP 403 for cloud IPs.
@@ -1178,7 +1241,10 @@ export default function VideoPlayer({ channel }) {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                 {state.pip && <span className="text-[10px] bg-brand-500/80 text-white px-2 py-0.5 rounded">PiP</span>}
-                <span className="glass text-white text-xs px-2 py-1 rounded font-semibold">{state.quality}</span>
+                <div className="flex items-center gap-1.5 glass px-2 py-1 rounded">
+                  <QualityWifi quality={state.quality} actualHeight={state.actualHeight} />
+                  <span className="text-white text-xs font-semibold">{state.quality}</span>
+                </div>
                 {channel?.url?.includes('.mpd') && (
                   <span className="text-[10px] bg-purple-700/70 text-white px-2 py-0.5 rounded font-bold">DASH</span>
                 )}

@@ -30,13 +30,10 @@ export default function Watch() {
     return () => setCurrentChannel(null)
   }, [channel])
 
-  // On mobile, scroll the page to the very top after navigation
+  // Scroll content area to top on channel change
   useEffect(() => {
-    if (!channel || window.innerWidth >= 768) return
-    const t = setTimeout(() => {
-      mainRef.current?.scrollTo({ top: 0, behavior: 'instant' })
-    }, 50)
-    return () => clearTimeout(t)
+    if (!channel) return
+    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' })
   }, [channel?.id])
 
   // Close panel when clicking outside

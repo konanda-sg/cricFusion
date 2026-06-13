@@ -10,15 +10,16 @@ import Search from './pages/Search'
 import Sports from './pages/Sports'
 import Account from './pages/Account'
 import Watch from './pages/Watch'
+import MultiView from './pages/MultiView'
 
 // Inner component so useLocation works inside BrowserRouter
 function AppContent() {
   const location = useLocation()
 
   return (
-    <div className="flex flex-col min-h-dvh bg-black text-white">
+    <div className="flex flex-col h-dvh bg-black text-white overflow-hidden">
       <Header />
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100dvh - 56px)' }}>
+      <div className="flex flex-1 overflow-hidden min-h-0">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
@@ -33,7 +34,8 @@ function AppContent() {
               <Route path="/search"   element={<Search />} />
               <Route path="/sports"   element={<Sports />} />
               <Route path="/account"  element={<Account />} />
-              <Route path="/watch/:id" element={<Watch />} />
+              <Route path="/watch/:id"   element={<Watch />} />
+              <Route path="/multiview"   element={<MultiView />} />
             </Routes>
           </motion.div>
         </AnimatePresence>

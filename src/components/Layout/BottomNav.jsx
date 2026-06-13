@@ -1,12 +1,13 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Home, Search, Trophy, UserCircle } from 'lucide-react'
+import { Home, Search, Trophy, UserCircle, LayoutGrid } from 'lucide-react'
 
 const TABS = [
-  { id: 'home',    label: 'Home',       icon: Home,        path: '/' },
-  { id: 'search',  label: 'Search',     icon: Search,      path: '/search' },
-  { id: 'sports',  label: 'Sports',     icon: Trophy,      path: '/sports' },
-  { id: 'account', label: 'Account',    icon: UserCircle,  path: '/account' },
+  { id: 'home',      label: 'Home',      icon: Home,        path: '/' },
+  { id: 'search',    label: 'Search',    icon: Search,      path: '/search' },
+  { id: 'multiview', label: 'Multi',     icon: LayoutGrid,  path: '/multiview' },
+  { id: 'sports',    label: 'Sports',    icon: Trophy,      path: '/sports' },
+  { id: 'account',   label: 'Account',   icon: UserCircle,  path: '/account' },
 ]
 
 export default function BottomNav() {
