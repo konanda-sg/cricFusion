@@ -25,9 +25,7 @@ const INTERVAL_MS = 6000
 export default function HeroSection() {
   const navigate    = useNavigate()
   const channels    = useStore((s) => s.channels)
-  const featured4K  = channels.filter((c) => c.isLive && c.badge === '4K')
-  const others      = channels.filter((c) => c.isLive && c.badge !== '4K')
-  const liveList    = [...featured4K, ...others].slice(0, 6)
+  const liveList    = channels.filter((c) => c.isLive).slice(0, 6)
   const [idx, setIdx]         = useState(0)
   const [imgFailed, setImgFailed] = useState(false)
   const [paused, setPaused]   = useState(false)
