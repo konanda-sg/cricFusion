@@ -579,6 +579,24 @@ export const STATIC_CHANNELS = [
     clearKey: { keyId: '433ffba670963e70857859a9dff4be04', key: '51ede3a821229fe81e71282c8eff80e3' },
     quality: ['Auto', '1080p', '720p', '480p'],
   },
+  {
+    id: 118,
+    key: 'prime',
+    name: 'Prime video 1080p50',
+    category: 'multi',
+    currentMatch: 'Prime video 1080p50 — Live',
+    thumbnail: T('1540747913346-19212a4b423f'),
+    logo: 'PRIME',
+    isLive: true,
+    viewers: '—',
+    badge: '1080p',
+    language: 'English',
+    description: 'Prime video 1080p50 — Live',
+    score: null,
+    url: 'https://ABGURYQAAAAAAAAMDWLAPGWRF4XPJ.bia-cf.live.pv-cdn.net/sin-nitro/live/clients/dash/enc/87d0tehlad/out/v1/403835568f5b4e3ca2d201cc88b594ee/cenc.mpd',
+    clearKey: { keyId: 'ee0c99be51120d109657df5229b48b01', key: '6f0cc18e09de8ec73414bb2209d6c63b' },
+    quality: ['Auto', '1080p', '720p', '480p'],
+  },
 ]
 
 export const categories = [
