@@ -2,46 +2,23 @@ import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Pause, Volume2, VolumeX, Volume1,
-  Maximize, Minimize, PictureInPicture2, Settings,
-  Radio, SkipBack, SkipForward, Lock
+  Maximize, Minimize, Radio, SkipBack, SkipForward, Settings, Lock,
 } from 'lucide-react'
 import { formatTime } from '../../utils/formatTime'
-
-const FIT_CYCLE = { contain: 'Fit', cover: 'Crop', fill: 'Full' }
-
-function CastIcon({ size = 15 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
-      <line x1="2" y1="20" x2="2.01" y2="20"/>
-    </svg>
-  )
-}
-
-function AirPlayIcon({ size = 15 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/>
-      <polygon points="12 15 17 21 7 21 12 15"/>
-    </svg>
-  )
-}
 
 export default function PlayerControls({
   state, channel,
   onPlayPause, onSeek, onSeekTo, onVolume, onMute,
-  onFullscreen, onPIP, onGoLive, onToggleQuality, onLock,
-  objectFit, onFitChange, subtitleActive,
-  castAvailable, casting, onCast,
-  airPlayAvailable, onAirPlay,
+  onFullscreen, onGoLive, onToggleQuality, onLock,
+  subtitleActive,
 }) {
   const { playing, muted, volume, currentTime, duration, buffered, fullscreen, isLive } = state
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
-  const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0
+  const progress     = duration > 0 ? (currentTime / duration) * 100 : 0
+  const bufferedPct  = duration > 0 ? (buffered  / duration) * 100 : 0
 
   const [hoverTime, setHoverTime] = useState(null)
-  const [hoverPct, setHoverPct] = useState(0)
-  const [showVol, setShowVol] = useState(false)
+  const [hoverPct,  setHoverPct]  = useState(0)
+  const [showVol,   setShowVol]   = useState(false)
   const progressRef = useRef(null)
 
   const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
@@ -61,9 +38,6 @@ export default function PlayerControls({
     onSeekTo(pct * (duration || 0))
   }, [duration, onSeekTo])
 
-  const handleProgressLeave = () => setHoverTime(null)
-
-  // Touch seek
   const handleProgressTouch = useCallback((e) => {
     e.stopPropagation()
     const rect = progressRef.current?.getBoundingClientRect()
@@ -89,11 +63,10 @@ export default function PlayerControls({
           className="relative flex-1 h-5 flex items-center cursor-pointer group/prog"
           onClick={handleProgressClick}
           onMouseMove={handleProgressMouseMove}
-          onMouseLeave={handleProgressLeave}
+          onMouseLeave={() => setHoverTime(null)}
           onTouchStart={handleProgressTouch}
           onTouchMove={handleProgressTouch}
         >
-          {/* Hover time tooltip */}
           <AnimatePresence>
             {hoverTime !== null && (
               <motion.div
@@ -106,13 +79,9 @@ export default function PlayerControls({
             )}
           </AnimatePresence>
 
-          {/* Track */}
           <div className="absolute inset-x-0 h-1 group-hover/prog:h-1.5 transition-all duration-100 rounded-full bg-white/20">
-            {/* Buffered */}
             <div className="absolute inset-y-0 left-0 bg-white/35 rounded-full transition-all" style={{ width: `${bufferedPct}%` }} />
-            {/* Played */}
             <div className="absolute inset-y-0 left-0 bg-brand-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
-            {/* Thumb */}
             <div
               className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-brand-400 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 transition-opacity pointer-events-none"
               style={{ left: `${progress}%` }}
@@ -129,9 +98,8 @@ export default function PlayerControls({
 
       {/* ── Button row ── */}
       <div className="flex items-center justify-between">
-        {/* Left group */}
+        {/* Left: playback + volume */}
         <div className="flex items-center gap-0.5 md:gap-1">
-          {/* Skip back 10s */}
           <ControlBtn onClick={() => onSeek(-10)} title="Back 10s (←)">
             <div className="relative flex items-center justify-center w-full h-full">
               <SkipBack size={17} />
@@ -139,7 +107,6 @@ export default function PlayerControls({
             </div>
           </ControlBtn>
 
-          {/* Play / Pause */}
           <motion.button
             whileTap={{ scale: 0.82 }}
             onClick={onPlayPause}
@@ -149,12 +116,11 @@ export default function PlayerControls({
             <AnimatePresence mode="wait">
               {playing
                 ? <motion.div key="pause" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.1 }}><Pause size={17} /></motion.div>
-                : <motion.div key="play" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.1 }}><Play size={17} className="ml-0.5" /></motion.div>
+                : <motion.div key="play"  initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ duration: 0.1 }}><Play size={17} className="ml-0.5" /></motion.div>
               }
             </AnimatePresence>
           </motion.button>
 
-          {/* Skip forward 10s */}
           <ControlBtn onClick={() => onSeek(10)} title="Forward 10s (→)">
             <div className="relative flex items-center justify-center w-full h-full">
               <SkipForward size={17} />
@@ -180,11 +146,9 @@ export default function PlayerControls({
                   className="overflow-hidden"
                 >
                   <div className="relative w-20 h-5 flex items-center px-1">
-                    {/* Track */}
                     <div className="absolute inset-x-1 h-1 bg-white/20 rounded-full">
                       <div className="h-full bg-white rounded-full" style={{ width: `${(muted ? 0 : volume) * 100}%` }} />
                     </div>
-                    {/* Thumb */}
                     <div
                       className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full shadow pointer-events-none"
                       style={{ left: `calc(4px + ${(muted ? 0 : volume) * 100}% * 72 / 80)` }}
@@ -200,13 +164,12 @@ export default function PlayerControls({
               )}
             </AnimatePresence>
 
-            {/* Volume % badge */}
             <span className="hidden md:block text-white/40 text-xs tabular-nums w-6 text-center">
               {muted ? 0 : Math.round(volume * 100)}
             </span>
           </div>
 
-          {/* Score pill (desktop) */}
+          {/* Score pill (desktop only) */}
           {channel?.score && (
             <div className="hidden lg:flex items-center gap-1.5 glass text-white/80 text-xs px-2.5 py-1 rounded-full ml-1 border border-white/10">
               <span className="w-1.5 h-1.5 bg-brand-400 rounded-full animate-pulse" />
@@ -215,9 +178,8 @@ export default function PlayerControls({
           )}
         </div>
 
-        {/* Right group */}
-        <div className="flex items-center gap-0.5 md:gap-1">
-          {/* Go Live */}
+        {/* Right: live + settings + fullscreen */}
+        <div className="flex items-center gap-1 md:gap-1.5">
           {channel?.isLive && (
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -230,48 +192,14 @@ export default function PlayerControls({
             </motion.button>
           )}
 
-          {/* Settings (quality + subtitles) */}
-          <ControlBtn onClick={onToggleQuality} title="Settings" active={state.showQualityMenu || subtitleActive}>
-            <Settings size={15} className={state.showQualityMenu ? 'animate-spin-slow' : ''} />
-          </ControlBtn>
-
-          {/* PiP */}
-          {typeof document !== 'undefined' && document.pictureInPictureEnabled && (
-            <ControlBtn onClick={onPIP} title="Picture-in-Picture (P)" active={state.pip}>
-              <PictureInPicture2 size={15} />
-            </ControlBtn>
-          )}
-
-          {/* Aspect ratio */}
-          <motion.button
-            whileTap={{ scale: 0.85 }}
-            onClick={onFitChange}
-            title="Aspect ratio"
-            className="h-8 px-2 text-white/75 hover:text-white hover:bg-white/10 rounded-lg text-[11px] font-bold transition-all"
-          >
-            {FIT_CYCLE[objectFit] ?? 'Fit'}
-          </motion.button>
-
-          {/* AirPlay — Safari only, shows when an Apple device is detected */}
-          {airPlayAvailable && (
-            <ControlBtn onClick={onAirPlay} title="AirPlay to Apple TV / Mac">
-              <AirPlayIcon size={15} />
-            </ControlBtn>
-          )}
-
-          {/* Chromecast — shows once Cast SDK detects a device */}
-          {castAvailable && (
-            <ControlBtn onClick={onCast} title={casting ? 'Stop casting' : 'Cast to TV'} active={casting}>
-              <CastIcon size={15} />
-            </ControlBtn>
-          )}
-
-          {/* Lock controls */}
           <ControlBtn onClick={onLock} title="Lock controls">
             <Lock size={15} />
           </ControlBtn>
 
-          {/* Fullscreen */}
+          <ControlBtn onClick={onToggleQuality} title="Settings" active={state.showQualityMenu || subtitleActive}>
+            <Settings size={15} className={state.showQualityMenu ? 'animate-spin-slow' : ''} />
+          </ControlBtn>
+
           <ControlBtn onClick={onFullscreen} title={fullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}>
             {fullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
           </ControlBtn>

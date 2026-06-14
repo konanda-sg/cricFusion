@@ -288,15 +288,20 @@ export default function VideoPlayer({ channel }) {
       const player = new shaka.Player()
       shakaRef.current = player
 
+      const is4K = channel.badge === '4K'
+
       // DRM: ClearKey (inline keys or license server)
       const cfg = {
         streaming: {
-          lowLatencyMode: true,
-          bufferingGoal: 10,
-          rebufferingGoal: 2,
-          stallEnabled: true,
+          lowLatencyMode:  false,   // prioritise smooth decode over latency for all streams
+          bufferingGoal:   is4K ? 60 : 30,  // deep buffer for all; extra deep for 4K
+          rebufferingGoal: is4K ? 10 : 5,   // wait for enough data before starting playback
+          bufferBehind:    30,
+          stallEnabled:    true,
+          stallThreshold:  0.5,     // detect stalls quickly
+          stallSkip:       0.1,     // micro-skip to escape decoder deadlocks
         },
-        abr: { enabled: true },
+        abr: { enabled: true, defaultBandwidthEstimate: 8_000_000 },
       }
       if (channel.clearKey) {
         cfg.drm = {
@@ -434,15 +439,16 @@ export default function VideoPlayer({ channel }) {
           player.configure({ abr: { enabled: false } })
           player.selectVariantTrack(best, true)
           update({ actualHeight: best.height ?? 0 })
-          // Re-enable ABR after 8 s with a floor so it never drops more than one tier
-          setTimeout(() => {
-            if (!shakaRef.current) return
-            const minHeight = best.height ? Math.max(best.height - 360, 480) : 480
-            shakaRef.current.configure({
-              abr: { enabled: true },
-              restrictions: { minHeight },
-            })
-          }, 8000)
+
+          if (!is4K) {
+            // Non-4K: re-enable ABR after 8 s with a quality floor
+            setTimeout(() => {
+              if (!shakaRef.current) return
+              const minHeight = best.height ? Math.max(best.height - 360, 480) : 480
+              shakaRef.current.configure({ abr: { enabled: true }, restrictions: { minHeight } })
+            }, 8000)
+          }
+          // 4K: keep ABR permanently off — zero switching = zero stutter
         }
 
         // Stream is live — clear any stale error overlay immediately
@@ -517,15 +523,18 @@ export default function VideoPlayer({ channel }) {
       const isFast = downlink >= 4 || conn?.effectiveType === '4g'
 
       const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 90,
-        maxBufferLength: isFast ? 60 : 30,
-        maxMaxBufferLength: isFast ? 120 : 60,
-        abrEwmaDefaultEstimate: isFast ? 8_000_000 : 1_500_000,
-        abrBandWidthFactor: isFast ? 0.95 : 0.8,
-        abrBandWidthUpFactor: isFast ? 0.9 : 0.7,
-        capLevelToPlayerSize: false,
+        enableWorker:            true,
+        lowLatencyMode:          false,                        // smooth decode over low latency
+        backBufferLength:        60,
+        maxBufferLength:         isFast ? 60  : 30,           // deep buffer for all streams
+        maxMaxBufferLength:      isFast ? 120 : 60,
+        abrEwmaDefaultEstimate:  isFast ? 8_000_000 : 1_500_000,
+        abrBandWidthFactor:      isFast ? 0.95 : 0.8,
+        abrBandWidthUpFactor:    isFast ? 0.9  : 0.7,
+        capLevelToPlayerSize:    false,
+        fragLoadingMaxRetry:     6,                           // retry failed segments
+        fragLoadingRetryDelay:   500,
+        manifestLoadingMaxRetry: 4,
       })
       hlsRef.current = hls
       hls.loadSource(channel.url)
@@ -1122,9 +1131,10 @@ export default function VideoPlayer({ channel }) {
         className="w-full h-full"
         style={{
           objectFit: state.objectFit,
-          transform: `scale(${state.zoom})`,
+          transform: `scale(${state.zoom}) translateZ(0)`,  // force GPU compositing layer
           filter: `brightness(${state.brightness})${state.enhance ? ' contrast(1.1) saturate(1.15)' : ''}`,
           transformOrigin: 'center',
+          willChange: 'transform',      // hint browser to promote to compositor thread
         }}
         playsInline preload="auto" x-webkit-airplay="allow"
       />
@@ -1326,18 +1336,10 @@ export default function VideoPlayer({ channel }) {
               onVolume={setVolume}
               onMute={toggleMute}
               onFullscreen={toggleFullscreen}
-              onPIP={togglePIP}
               onGoLive={goLive}
               onToggleQuality={() => update({ showQualityMenu: !state.showQualityMenu })}
               onLock={() => update({ locked: true, showControls: false })}
               subtitleActive={state.subtitleMode !== null}
-              objectFit={state.objectFit}
-              onFitChange={cycleFit}
-              castAvailable={castAvailable}
-              casting={casting}
-              onCast={toggleCast}
-              airPlayAvailable={airPlayAvailable}
-              onAirPlay={toggleAirPlay}
             />
           </motion.div>
         )}
@@ -1358,6 +1360,16 @@ export default function VideoPlayer({ channel }) {
             onSelectSubtitle={applySubtitle}
             enhance={state.enhance}
             onToggleEnhance={() => update({ enhance: !state.enhance })}
+            pipEnabled={typeof document !== 'undefined' && document.pictureInPictureEnabled}
+            pip={state.pip}
+            onPIP={togglePIP}
+            objectFit={state.objectFit}
+            onFitChange={cycleFit}
+            airPlayAvailable={airPlayAvailable}
+            onAirPlay={toggleAirPlay}
+            castAvailable={castAvailable}
+            casting={casting}
+            onCast={toggleCast}
             onClose={() => update({ showQualityMenu: false })}
           />
         )}
