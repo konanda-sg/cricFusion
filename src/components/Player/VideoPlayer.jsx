@@ -93,6 +93,7 @@ export default function VideoPlayer({ channel }) {
   const containerRef = useRef(null)
   const hideTimer   = useRef(null)
   const seekIndicatorTimer = useRef(null)
+  const waitingTimer = useRef(null)   // debounces the loading spinner on brief stalls
   const clickTimer  = useRef(null)
   const liveRef     = useRef({})   // always-fresh mirror of state for closures
   const gestureRef  = useRef({ active: false, isSwipe: false, side: null, startY: 0, startValue: 0, pinchActive: false, pinchDist: 0, startZoom: 1 })
@@ -290,18 +291,31 @@ export default function VideoPlayer({ channel }) {
 
       const is4K = channel.badge === '4K'
 
+      const dashConn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+      const dashDownlink = dashConn?.downlink ?? 10
+      // Quality ceiling matched to the connection so ABR can't overshoot and stall.
+      // 4K channels keep a higher ceiling; everything else is capped to a sustainable tier.
+      const dashMaxHeight = is4K ? Infinity : (dashDownlink >= 8 ? 1080 : dashDownlink >= 3 ? 720 : 480)
+
       // DRM: ClearKey (inline keys or license server)
       const cfg = {
         streaming: {
           lowLatencyMode:  false,
-          bufferingGoal:   is4K ? 30 : 15,  // reduced — less fill needed before playback feels smooth
-          rebufferingGoal: is4K ? 4  : 2,   // start playback sooner after a stall
-          bufferBehind:    20,
+          // Bigger buffer so playback rides out network dips instead of stalling repeatedly.
+          bufferingGoal:   is4K ? 60 : 45,  // seconds to fill ahead
+          rebufferingGoal: is4K ? 6  : 4,   // require a real cushion before resuming after a stall
+          bufferBehind:    60,
           stallEnabled:    true,
-          stallThreshold:  0.5,
+          stallThreshold:  1,
           stallSkip:       0.1,
         },
-        abr: { enabled: true, defaultBandwidthEstimate: 4_000_000 },  // conservative start, let ABR ramp up
+        abr: {
+          enabled: true,
+          defaultBandwidthEstimate: 2_500_000,  // conservative start, let ABR ramp up
+          bandwidthDowngradeTarget: 0.9,         // drop quality early when bandwidth tightens
+          bandwidthUpgradeTarget:   0.7,         // upgrade cautiously to avoid stall-inducing overshoot
+        },
+        restrictions: { maxHeight: dashMaxHeight },  // cap to a sustainable resolution
       }
       if (channel.clearKey) {
         cfg.drm = {
@@ -441,7 +455,8 @@ export default function VideoPlayer({ channel }) {
             update({ actualHeight: starter.height ?? 0 })
             setTimeout(() => {
               if (!shakaRef.current) return
-              shakaRef.current.configure({ abr: { enabled: true }, restrictions: {} })
+              // Re-enable ABR but keep the resolution cap so it can't overshoot the connection.
+              shakaRef.current.configure({ abr: { enabled: true }, restrictions: { maxHeight: dashMaxHeight } })
             }, 5000)
           }
         }
@@ -516,19 +531,34 @@ export default function VideoPlayer({ channel }) {
       const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
       const downlink = conn?.downlink ?? 10  // Mbps; assume fast if API unavailable
       const isFast = downlink >= 4 || conn?.effectiveType === '4g'
+      // Quality ceiling: a stream whose bitrate exceeds the connection can never fill
+      // the buffer, so it stalls forever. Cap the resolution to what the link can sustain.
+      const maxHeightCap = downlink >= 8 ? 1080 : downlink >= 3 ? 720 : 480
 
       const hls = new Hls({
         enableWorker:            true,
         lowLatencyMode:          false,
-        backBufferLength:        30,
-        maxBufferLength:         isFast ? 30 : 15,            // smaller buffer = faster start, less stall recovery time
-        maxMaxBufferLength:      isFast ? 60 : 30,
-        abrEwmaDefaultEstimate:  4_000_000,                   // conservative start; ABR ramps up quickly
-        abrBandWidthFactor:      0.85,                        // stay a tier below measured peak to avoid stalls
-        abrBandWidthUpFactor:    0.75,
-        capLevelToPlayerSize:    false,
-        fragLoadingMaxRetry:     6,
+        // Larger buffers give playback enough cushion to ride out network dips
+        // instead of stalling every few seconds (the "play / load / play / load" loop).
+        backBufferLength:        60,
+        maxBufferLength:         isFast ? 60 : 40,            // seconds of forward buffer to hold
+        maxMaxBufferLength:      isFast ? 120 : 90,
+        maxBufferSize:           120 * 1000 * 1000,          // 120 MB cap before size-based eviction
+        // Wait until a healthy cushion exists before resuming after a stall, so we
+        // don't immediately re-stall on the next hiccup.
+        maxBufferHole:           0.5,
+        highBufferWatchdogPeriod: 3,
+        nudgeMaxRetry:           10,
+        abrEwmaDefaultEstimate:  2_500_000,                   // conservative start; ABR ramps up as bandwidth proves out
+        abrBandWidthFactor:      0.7,                         // stay well below measured peak to avoid stalls
+        abrBandWidthUpFactor:    0.6,                         // switch up cautiously
+        abrEwmaFastLive:         3.0,                         // smooth bandwidth estimate on live so ABR doesn't thrash
+        abrEwmaSlowLive:         9.0,
+        capLevelToPlayerSize:    true,                        // never fetch quality larger than the player can show
+        capLevelOnFPSDrop:       true,
+        fragLoadingMaxRetry:     8,
         fragLoadingRetryDelay:   500,
+        fragLoadingMaxRetryTimeout: 8000,
         manifestLoadingMaxRetry: 4,
       })
       hlsRef.current = hls
@@ -548,10 +578,19 @@ export default function VideoPlayer({ channel }) {
         })
         const levels = Object.values(bestByKey).sort((a, b) => (a.height ?? 0) - (b.height ?? 0))
 
-        // Mid-tier start only when Auto — specific quality preferences are applied
-        // by the preferredQuality effect immediately after and must not be pre-empted.
+        // Cap ABR to the resolution the connection can sustain so it never climbs
+        // to a bitrate that drains the buffer faster than it fills.
         if (preferredQuality === 'Auto') {
-          hls.startLevel = Math.floor(data.levels.length / 2)
+          const allowed = data.levels
+            .map((l, i) => ({ i, h: l.height ?? 0 }))
+            .filter((l) => l.h <= maxHeightCap)
+          const capIdx = allowed.length ? Math.max(...allowed.map((l) => l.i)) : -1
+          hls.autoLevelCapping = capIdx
+          // Start low so the buffer fills fast, then let ABR ramp up within the cap.
+          const lowIdx = allowed.length
+            ? allowed.reduce((a, b) => (b.h < a.h ? b : a)).i
+            : 0
+          hls.startLevel = lowIdx
         }
 
         update({ qualityLevels: [{ id: -1, label: 'Auto' }, ...levels], loading: false })
@@ -643,21 +682,29 @@ export default function VideoPlayer({ channel }) {
 
     const onTime     = () => update({ currentTime: v.currentTime, duration: v.duration || 0 })
     const onProgress = () => { if (v.buffered.length) update({ buffered: v.buffered.end(v.buffered.length - 1) }) }
-    const onWaiting  = () => update({ loading: true })
-    const onPlaying  = () => update({ loading: false, playing: true, error: null })
+    // Debounce the spinner: only show it if the stall lasts past ~700ms, so brief
+    // micro-stalls don't flash "Loading…" and make playback feel choppier than it is.
+    const onWaiting  = () => {
+      clearTimeout(waitingTimer.current)
+      waitingTimer.current = setTimeout(() => update({ loading: true }), 700)
+    }
+    const clearWaiting = () => { clearTimeout(waitingTimer.current); waitingTimer.current = null }
+    const onPlaying  = () => { clearWaiting(); update({ loading: false, playing: true, error: null }) }
     const onPause    = () => update({ playing: false })
     const onVolume   = () => update({ volume: v.volume, muted: v.muted })
     const onEnded    = () => update({ playing: false })
-    const onLoaded   = () => update({ loading: false })
+    const onLoaded   = () => { clearWaiting(); update({ loading: false }) }
+    const onCanPlay  = () => { clearWaiting(); update({ loading: false }) }
 
     on('timeupdate', onTime); on('progress', onProgress); on('waiting', onWaiting)
     on('playing', onPlaying); on('pause', onPause); on('volumechange', onVolume)
-    on('ended', onEnded); on('loadeddata', onLoaded)
+    on('ended', onEnded); on('loadeddata', onLoaded); on('canplay', onCanPlay)
 
     return () => {
+      clearTimeout(waitingTimer.current)
       off('timeupdate', onTime); off('progress', onProgress); off('waiting', onWaiting)
       off('playing', onPlaying); off('pause', onPause); off('volumechange', onVolume)
-      off('ended', onEnded); off('loadeddata', onLoaded)
+      off('ended', onEnded); off('loadeddata', onLoaded); off('canplay', onCanPlay)
     }
   }, [])
 
