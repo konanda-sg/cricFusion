@@ -1076,6 +1076,8 @@ export const categories = [
   { id: 'fifa2026',    label: 'FIFA 2026',    icon: '🏆' },
   { id: 'fancode',     label: 'FanCode',      icon: '⚡' },
   { id: 'sonyliv',     label: 'Sony LIV',     icon: '📺' },
+  { id: 'iptvsports',  label: 'IPTV Sports',  icon: '📡' },
+  { id: 'tamil',       label: 'Tamil',        icon: '🎬' },
   ...(FEATURES.TATAPLAY ? [{ id: 'tataplay', label: 'Tata Play', icon: '📡' }] : []),
   { id: 'cricket',     label: 'Cricket',      icon: '🏏' },
   { id: 'football',    label: 'Football',     icon: '⚽' },

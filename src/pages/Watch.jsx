@@ -22,8 +22,13 @@ export default function Watch() {
 
   const channel = channels.find((c) => String(c.id) === id)
   const liked = favorites.includes(channel?.id)
-  const related = channels.filter((c) => String(c.id) !== id && c.isLive).slice(0, 6)
-  const liveChannels = channels.filter((c) => c.isLive && String(c.id) !== id)
+
+  // Same category first, then other live channels
+  const others = channels.filter((c) => String(c.id) !== id && c.isLive)
+  const sameCategory = others.filter((c) => c.category === channel?.category)
+  const different   = others.filter((c) => c.category !== channel?.category)
+  const related     = [...sameCategory, ...different].slice(0, 12)
+  const liveChannels = [...sameCategory, ...different]
 
   useEffect(() => {
     if (channel) setCurrentChannel(channel)
@@ -120,30 +125,6 @@ export default function Watch() {
           >
             <VideoPlayer channel={channel} />
           </motion.div>
-
-          {/* Mobile channel switcher */}
-          <div className="md:hidden">
-            <div className="flex items-center gap-2 mb-2">
-              <Radio size={14} className="text-brand-500 animate-pulse" />
-              <span className="text-white/70 text-xs font-semibold uppercase tracking-wider">Switch Channel</span>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-              {liveChannels.map((ch) => (
-                <motion.button
-                  key={ch.id}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate(`/watch/${ch.id}`)}
-                  className="flex-shrink-0 flex flex-col items-center gap-1 p-2.5 rounded-xl bg-dark-700 border border-white/[0.06] hover:border-brand-500/40 transition-all min-w-[72px]"
-                >
-                  <div className="w-10 h-7 rounded gradient-brand flex items-center justify-center text-[9px] font-black text-white">
-                    {ch.logo}
-                  </div>
-                  <span className="text-white/60 text-[10px] font-medium truncate w-full text-center">{ch.name}</span>
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                </motion.button>
-              ))}
-            </div>
-          </div>
 
           {/* Info */}
           <motion.div
@@ -299,7 +280,7 @@ export default function Watch() {
             </div>
           </motion.div>
 
-          {/* Related */}
+          {/* Related channels — same category first */}
           {related.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}
@@ -307,10 +288,12 @@ export default function Watch() {
             >
               <div className="flex items-center justify-between pt-3">
                 <div className="flex items-center gap-2">
-                  <Radio size={15} className="text-brand-500" />
-                  <h3 className="text-white font-bold">More Live Now</h3>
+                  <Radio size={15} className="text-brand-500 animate-pulse" />
+                  <h3 className="text-white font-bold capitalize">
+                    {sameCategory.length > 0 ? `More ${channel.category}` : 'More Live Now'}
+                  </h3>
                   <span className="text-xs bg-red-600/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">
-                    {related.length}
+                    {liveChannels.length}
                   </span>
                 </div>
                 <button
@@ -320,6 +303,32 @@ export default function Watch() {
                   See all <ChevronRight size={14} />
                 </button>
               </div>
+
+              {/* Quick-switch horizontal strip */}
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {liveChannels.slice(0, 30).map((ch) => (
+                  <motion.button
+                    key={ch.id}
+                    whileTap={{ scale: 0.93 }}
+                    onClick={() => navigate(`/watch/${ch.id}`)}
+                    className={`flex-shrink-0 flex flex-col items-center gap-1 p-2.5 rounded-xl border transition-all min-w-[72px] ${
+                      ch.category === channel.category
+                        ? 'bg-brand-500/10 border-brand-500/30 hover:border-brand-400/60'
+                        : 'bg-dark-700 border-white/[0.06] hover:border-white/20'
+                    }`}
+                  >
+                    <div className={`w-10 h-7 rounded flex items-center justify-center text-[9px] font-black text-white ${
+                      ch.category === channel.category ? 'gradient-brand' : 'bg-dark-600'
+                    }`}>
+                      {ch.logo}
+                    </div>
+                    <span className="text-white/60 text-[10px] font-medium truncate w-full text-center leading-tight">{ch.name.replace(/\s*\(.*?\)\s*/g, '')}</span>
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Card grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {related.map((ch, i) => <ChannelCard key={ch.id} channel={ch} index={i} />)}
               </div>

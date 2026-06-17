@@ -4,6 +4,8 @@ import {
   DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel, mapSonyLivChannel,
   mapFifaChannel,
 } from '../data/channels'
+import { IPTV_SPORTS_CHANNELS } from '../data/iptv-sports'
+import { IPTV_TAMIL_CHANNELS } from '../data/iptv-tamil'
 import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 import { FEATURES } from '../config/features'
@@ -101,7 +103,7 @@ export const useStore = create((set, get) => ({
   },
 
   // ── Channels (loaded from API) ─────────────────────────────────────────
-  channels: [...STATIC_CHANNELS],  // start with static; FIFA + API channels loaded at runtime
+  channels: [...STATIC_CHANNELS, ...IPTV_SPORTS_CHANNELS, ...IPTV_TAMIL_CHANNELS],  // start with static; FIFA + API channels loaded at runtime
   channelsLoading: false,
   channelsError: null,
   lastFetched: null,
@@ -220,7 +222,7 @@ export const useStore = create((set, get) => ({
         }
       }
 
-      const allChannels = [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fifaChannels, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels]
+      const allChannels = [...apiChannels, ...dynamicChannels, ...STATIC_CHANNELS, ...fifaChannels, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels, ...IPTV_SPORTS_CHANNELS, ...IPTV_TAMIL_CHANNELS]
       const seen = new Set()
       const deduped = allChannels.filter((ch) => {
         if (seen.has(ch.key)) return false
