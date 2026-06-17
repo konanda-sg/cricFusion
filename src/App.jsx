@@ -70,6 +70,13 @@ export default function App() {
     return () => { clearInterval(interval); window.removeEventListener('cf_maintenance_change', handler) }
   }, [])
 
+  // When maintenance kicks in: exit fullscreen and stop all video/audio
+  useEffect(() => {
+    if (!maintenance) return
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    document.querySelectorAll('video, audio').forEach(el => { el.pause(); el.src = ''; el.load() })
+  }, [maintenance])
+
   useEffect(() => {
     const html = document.documentElement
     html.classList.toggle('dark', darkMode)
