@@ -350,7 +350,7 @@ export default function VideoPlayer({ channel }) {
       // MANIFEST phase: strip Widevine/PlayReady XML + inject ClearKey ContentProtection.
       // SEGMENT phase:  strip Widevine PSSH boxes from binary MP4 init segments so Shaka
       //   does not fall back to the Widevine CDM when it reads the segment's DRM metadata.
-      if (channel.drmSystem === 'clearkey') {
+      if (channel.clearKey || channel.drmSystem === 'clearkey') {
         player.getNetworkingEngine().registerResponseFilter((type, response) => {
           const MT = shaka.net.NetworkingEngine.RequestType.MANIFEST
           const ST = shaka.net.NetworkingEngine.RequestType.SEGMENT
@@ -622,7 +622,15 @@ export default function VideoPlayer({ channel }) {
       })
       hls.on(Hls.Events.ERROR, (_, d) => {
         // Sony LIV on prod: Akamai returns HTTP 403 for cloud IPs.
-        // Check the actual response code so local dev (Akamai returns 200) is unaffected.
+        // On mobile (real carrier IP), Akamai does NOT block — retry with originalUrl directly.
+        if (channel.sonyLivUrl && d.response?.code === 403 && !fallbackTriedRef.current && channel.originalUrl) {
+          fallbackTriedRef.current = true
+          update({ error: null, loading: true })
+          hls.stopLoad()
+          hls.loadSource(channel.originalUrl)
+          hls.startLoad()
+          return
+        }
         if (channel.sonyLivUrl && d.response?.code === 403) {
           update({ error: 'Stream unavailable via proxy.', loading: false })
           hls.stopLoad()
@@ -649,6 +657,17 @@ export default function VideoPlayer({ channel }) {
       // the proxy is likely hanging. Show an actionable error instead of spinning forever.
       const stuckTimer = setTimeout(() => {
         if (isCancelled || liveRef.current.playing || liveRef.current.error) return
+        // Proxy stalled (no 403 but no data either) — try originalUrl directly on mobile
+        if (channel.sonyLivUrl && !fallbackTriedRef.current && channel.originalUrl) {
+          fallbackTriedRef.current = true
+          update({ error: null, loading: true })
+          if (hlsRef.current) {
+            hlsRef.current.stopLoad()
+            hlsRef.current.loadSource(channel.originalUrl)
+            hlsRef.current.startLoad()
+          }
+          return
+        }
         if (channel.sonyLivUrl) {
           update({ error: 'Stream unavailable via proxy.', loading: false })
         } else {
