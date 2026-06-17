@@ -47,7 +47,7 @@ export default function ChannelCard({ channel, index = 0, animated = true }) {
             : '0 2px 12px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06)',
         }}
         transition={{ type: 'spring', stiffness: 270, damping: 22 }}
-        className="rounded-2xl overflow-hidden bg-[#141414]"
+        className={`rounded-2xl overflow-hidden bg-[#141414] ${channel.status === 'down' ? 'opacity-60' : ''}`}
         style={{ transformStyle: 'preserve-3d' }}
       >
         {/* ── Thumbnail ── */}
@@ -99,21 +99,42 @@ export default function ChannelCard({ channel, index = 0, animated = true }) {
             )}
           </AnimatePresence>
 
+          {/* Offline overlay */}
+          {channel.status === 'down' && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+              <span className="text-[10px] font-black tracking-wider text-red-400 bg-black/70 px-2 py-1 rounded">
+                OFFLINE
+              </span>
+            </div>
+          )}
+
           {/* Top row badges */}
-          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between">
-            {channel.isLive ? (
+          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between z-20">
+            {channel.status === 'down' ? (
+              <span className="flex items-center gap-1 bg-red-900/80 text-red-300 text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider">
+                OFFLINE
+              </span>
+            ) : channel.isLive ? (
               <span className="flex items-center gap-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider">
                 <span className="w-1 h-1 bg-white rounded-full animate-pulse" />
                 LIVE
               </span>
             ) : <span />}
-            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded backdrop-blur-sm ${
-              channel.badge === '4K' ? 'bg-purple-600/90 text-white' :
-              channel.badge === 'HD' ? 'bg-blue-600/80 text-white' :
-              'bg-black/50 text-white/60'
-            }`}>
-              {channel.badge}
-            </span>
+            <div className="flex items-center gap-1">
+              {channel.status === 'hq' && (
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded backdrop-blur-sm bg-yellow-500/90 text-black">
+                  ★ HQ
+                </span>
+              )}
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded backdrop-blur-sm ${
+                channel.badge === '4K' ? 'bg-purple-600/90 text-white' :
+                channel.badge === '2K' ? 'bg-indigo-500/90 text-white' :
+                channel.badge === 'HD' ? 'bg-blue-600/80 text-white' :
+                'bg-black/50 text-white/60'
+              }`}>
+                {channel.badge}
+              </span>
+            </div>
           </div>
 
           {/* Score */}

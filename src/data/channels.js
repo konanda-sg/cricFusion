@@ -975,7 +975,101 @@ export const STATIC_CHANNELS = [
     clearKey: { keyId: '43513b13f4b542e39c9265921dfc1726', key: 'b0b2678bcd274c37b888a6c987d502ed' },
     quality: ['Auto', '1080p', '720p', '480p'],
   },
+  {
+    id: 140,
+    key: 'trt2kfhd',
+    name: 'TRT 2K FHD',
+    category: 'fifa2026',
+    currentMatch: 'FIFA World Cup 2026 — Live',
+    thumbnail: T('1508098280132-0cd47883c18c'),
+    logo: 'TRT',
+    isLive: true,
+    viewers: '—',
+    badge: '2K',
+    language: 'Turkish',
+    description: 'TRT 2K FHD — FIFA World Cup 2026 Live',
+    score: null,
+    url: 'https://tv-trt1-esdai.medya.trt.com.tr/master.m3u8',
+    clearKey: null,
+    quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 141,
+    key: 'cazenew',
+    name: 'Caze TV New',
+    category: 'fifa2026',
+    currentMatch: 'FIFA World Cup 2026 — Live',
+    thumbnail: T('1508098280132-0cd47883c18c'),
+    logo: 'CZNW',
+    isLive: true,
+    viewers: '—',
+    badge: 'HD',
+    language: 'Portuguese',
+    description: 'Caze TV New — FIFA World Cup 2026 Live',
+    score: null,
+    url: 'https://a121aivottepl-a.akamaihd.net/gru-nitro/live/clients/dash/enc/jo3rmhhp2r/out/v1/50656942ce4e40a1be824c9d83578fe9/cenc.mpd',
+    clearKey: { keyId: '34475edab991ad5e92548aebd710410a', key: '501b209cccd323ac00bf5ac15b406cb4' },
+    quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 142,
+    key: 'ntvnew',
+    name: 'N TV',
+    category: 'fifa2026',
+    currentMatch: 'FIFA World Cup 2026 — Live',
+    thumbnail: T('1508098280132-0cd47883c18c'),
+    logo: 'NTVN',
+    isLive: true,
+    viewers: '—',
+    badge: 'HD',
+    language: 'English',
+    description: 'N TV — FIFA World Cup 2026 Live',
+    score: null,
+    url: 'https://qp-pldt-live-bpk-ucd-prod.akamaized.net/bpk-tv/ch299/default/index.mpd',
+    clearKey: { keyId: '549ab7cd35a64bb6bb479ecead04d69d', key: '829799ed534d11fcadeb4b192467e050' },
+    quality: ['Auto', '1080p', '720p', '480p'],
+  },
 ]
+
+// ── FIFA channel status map ───────────────────────────────────────────────────
+// 'hq'   = high quality + confirmed working (shown first)
+// 'ok'   = working standard quality (shown second)
+// 'down' = not working currently (shown last, visually dimmed)
+// Keys must match the `key` field on the channel object.
+export const FIFA_STATUS = {
+  trt2kfhd:    'hq',   // 2K FHD — Turkish HLS, confirmed working
+  FoxSports:   'ok',
+  foxusa:      'ok',
+  fifaprime1:  'ok',
+  DirecTV:     'ok',
+  dsports:     'ok',
+  Telemundo:   'ok',
+  telemundo2:  'ok',
+  TSN:         'ok',
+  tsn1:        'ok',
+  Cignal:      'ok',
+  CazeTV:      'ok',
+  cazetvprime: 'ok',
+  cazenew:     'ok',
+  ntv:         'ok',
+  ntvnew:      'ok',
+  TipikFR:     'ok',
+  CanalSports: 'ok',
+  Nu9ve:       'ok',
+  VRTDutch:    'ok',
+  ORFGerman:   'ok',
+  ZDFGerman:   'ok',
+  M6France:    'ok',
+  m6:          'ok',
+  beeline319:  'ok',
+}
+
+// Priority for sorting: hq=0, ok=1, down=2
+export function fifaStatusOf(key) {
+  return FIFA_STATUS[key] ?? 'ok'
+}
+
+export const FIFA_SORT_WEIGHT = { hq: 0, ok: 1, down: 2 }
 
 export const categories = [
   { id: 'all',         label: 'Trending',     icon: '🔥' },

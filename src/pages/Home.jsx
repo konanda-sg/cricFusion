@@ -6,6 +6,7 @@ import CategoryTabs from '../components/UI/CategoryTabs'
 import ChannelCard from '../components/UI/ChannelCard'
 import PullIndicator from '../components/UI/PullIndicator'
 import { useStore } from '../store/useStore'
+import { fifaStatusOf, FIFA_SORT_WEIGHT } from '../data/channels'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { usePagedList } from '../hooks/usePagedList'
 
@@ -138,6 +139,11 @@ export default function Home() {
       list = list.filter((c) => c.key?.startsWith('tp_'))
     } else if (activeCategory !== 'all') {
       list = list.filter((c) => c.category === activeCategory)
+    }
+    if (activeCategory === 'fifa2026') {
+      list = list
+        .map((ch) => ({ ...ch, status: fifaStatusOf(ch.key) }))
+        .sort((a, b) => FIFA_SORT_WEIGHT[a.status] - FIFA_SORT_WEIGHT[b.status])
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
