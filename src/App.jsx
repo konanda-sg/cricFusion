@@ -64,7 +64,7 @@ export default function App() {
       if (s) { setMaintenance(s.down); setMaintMessage(s.message || '') }
     }
     check()
-    const interval = setInterval(check, 5 * 60 * 1000) // re-check every 5 min
+    const interval = setInterval(check, 15 * 1000) // re-check every 15 s
     // Also re-check immediately when owner fires the console command
     const handler = () => check()
     window.addEventListener('cf_maintenance_change', handler)
