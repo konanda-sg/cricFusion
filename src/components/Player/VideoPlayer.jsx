@@ -200,7 +200,7 @@ export default function VideoPlayer({ channel }) {
       const url = channel.url.startsWith('/')
         ? `${window.location.origin}${channel.url}`
         : channel.url
-      const mimeType = url.includes('.mpd') ? 'application/dash+xml' : 'application/x-mpegURL'
+      const mimeType = (url.includes('.mpd') || url.includes('/api/cf-m6')) ? 'application/dash+xml' : 'application/x-mpegURL'
 
       const mediaInfo = new chrome.cast.media.MediaInfo(url, mimeType)
       mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata()
@@ -254,7 +254,7 @@ export default function VideoPlayer({ channel }) {
     video.removeAttribute('src')
     video.load()
 
-    const isMPD = channel.url.includes('.mpd') || channel.url.includes('/api/tp-mpd')
+    const isMPD = channel.url.includes('.mpd') || channel.url.includes('/api/tp-mpd') || channel.url.includes('/api/cf-m6')
     const isHLS = channel.url.includes('.m3u8')
 
     // ── DASH / MPD via Shaka Player ──
@@ -493,14 +493,14 @@ export default function VideoPlayer({ channel }) {
       ;(async () => {
         try {
           await player.attach(video)
-          await player.load(channel.url)
+          await player.load(channel.url, null, channel.mimeType || undefined)
         } catch (err) {
           if (isCancelled) return
           console.error('Shaka load failed', err)
           if (liveRef.current.playing || (liveRef.current.currentTime ?? 0) > 0) return
           if (channel.fallbackUrl && !fallbackTriedRef.current) {
             fallbackTriedRef.current = true
-            try { await player.load(channel.fallbackUrl); return } catch {}
+            try { await player.load(channel.fallbackUrl, null, channel.mimeType || undefined); return } catch {}
           }
           if (isCancelled) return
           const msg =

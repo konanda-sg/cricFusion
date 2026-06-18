@@ -264,6 +264,7 @@ export function mapFifaChannel(s) {
     description:  s.description,
     score:        null,
     url:          s.url,
+    mimeType:     s.mimeType || undefined,
     clearKey:     s.keyId ? { keyId: s.keyId, key: s.drmKey } : null,
     quality:      ['Auto', '1080p', '720p', '480p'],
   }

@@ -105,6 +105,36 @@ function sonyLivDevProxy() {
   }
 }
 
+// Dev-time proxy for /api/cf-m6 — proxies M6 France manifest with correct Origin header
+function m6DevProxy() {
+  return {
+    name: 'm6-api-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/cf-m6')) return next()
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end() }
+        try {
+          const handlerUrl = pathToFileURL(nodePath.join(process.cwd(), 'api', 'cf-m6.js')).href + `?t=${Date.now()}`
+          const mod = await import(handlerUrl)
+          const fakeReq = { method: req.method, headers: { referer: 'http://localhost:5173' } }
+          const fakeRes = {
+            _status: 200,
+            status(c) { this._status = c; return this },
+            end(b) { res.statusCode = this._status; res.end(b) },
+            send(b) { res.statusCode = this._status; res.end(b) },
+            setHeader(k, v) { res.setHeader(k, v) },
+          }
+          await mod.default(fakeReq, fakeRes)
+        } catch (e) {
+          console.error('[m6-api-dev]', e)
+          res.statusCode = 500; res.end('dev error: ' + e.message)
+        }
+      })
+    },
+  }
+}
+
 // Dev-time proxy for /api/cf-fifa — runs the Vercel handler locally
 function fifaDevProxy() {
   return {
@@ -384,7 +414,7 @@ function m3uDevProxy() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), sonyLivDevProxy(), m3uDevProxy(), tpLicenseDevProxy(), tpWvLicenseDevProxy(), tpMpdProxyDev(), tpApiDevProxy(), fifaDevProxy()],
+  plugins: [react(), sonyLivDevProxy(), m3uDevProxy(), tpLicenseDevProxy(), tpWvLicenseDevProxy(), tpMpdProxyDev(), tpApiDevProxy(), fifaDevProxy(), m6DevProxy()],
   server: {
     proxy: {
       '/cf-sonyliv': {

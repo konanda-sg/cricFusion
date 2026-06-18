@@ -20,7 +20,7 @@ export default function MiniPlayer({ channel, isAudioActive, onActivate, onRemov
     if (shakaRef.current) { shakaRef.current.destroy(); shakaRef.current = null }
     video.removeAttribute('src'); video.load()
 
-    const isMPD = channel.url.includes('.mpd') || channel.url.includes('/api/tp-mpd')
+    const isMPD = channel.url.includes('.mpd') || channel.url.includes('/api/tp-mpd') || channel.url.includes('/api/cf-m6')
 
     if (isMPD) {
       const shaka = window.shaka
