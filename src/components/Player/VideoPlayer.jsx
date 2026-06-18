@@ -358,13 +358,15 @@ export default function VideoPlayer({ channel }) {
           if (type === MT) {
             try {
               let text = new TextDecoder('utf-8', { fatal: false }).decode(response.data)
-              const kidMatch = text.match(/default_KID="\{?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}?"/i)
+              const kidMatch = text.match(/default_KID[=">]+\{?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}?/i)
               const kid = kidMatch?.[1]?.toLowerCase() ?? null
               text = text.replace(/<ContentProtection[^>]*edef8ba9[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
               text = text.replace(/<ContentProtection[^>]*9a04f079[^>]*(?:\/>|>[\s\S]*?<\/ContentProtection>)/gi, '')
               text = text.replace(/<(?:\w+:)?pssh[^>]*>[\s\S]*?<\/(?:\w+:)?pssh>/gi, '')
               if (kid && !text.includes('e2719d58-a985-b3c9-781a-b030af78d30e')) {
-                const ck = `<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>`
+                // Declare xmlns:cenc inline to avoid undeclared namespace prefix causing
+                // DOMParser parsererror (Shaka DASH_INVALID_XML / error 4001).
+                const ck = `<ContentProtection xmlns:cenc="urn:mpeg:cenc:2013" schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" value="ClearKey1.0"><cenc:default_KID>${kid}</cenc:default_KID></ContentProtection>`
                 text = text.includes('<ContentProtection')
                   ? text.replace(/<ContentProtection/g, `${ck}\n        <ContentProtection`)
                   : text.replace(/<Representation/g, `${ck}\n        <Representation`)
