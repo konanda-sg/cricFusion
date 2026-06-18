@@ -1,5 +1,6 @@
 // Vercel serverless — FIFA 2026 stream data.
-// clearKeys and URLs never ship in the JS bundle; served server-side only.
+// Dynamic channels are fetched live from footapi (keys + URLs always fresh).
+// Static channels are for streams not available in footapi.
 // Referer-locked: only cricfusion.vercel.app and localhost may fetch this.
 
 const ALLOWED = [
@@ -8,47 +9,58 @@ const ALLOWED = [
   'http://localhost:4173',
 ]
 
-const FIFA_STREAMS = [
+const FOOTAPI_URL = 'https://footapi-psi.vercel.app/main'
+const FOOTAPI_ORIGIN = 'https://footsterss.pages.dev'
+
+// UI metadata for footapi channel IDs (logo, language, badge, mimeType)
+const FOOTAPI_META = {
+  fifaprime1:      { logo: 'FOX',  language: 'English',    badge: '4K' },
+  foxavc:          { logo: 'FOX',  language: 'English' },
+  foxusa:          { logo: 'FOX',  language: 'English',    badge: '720p' },
+  cazetvprime:     { logo: 'CZE',  language: 'Portuguese' },
+  cazeios:         { logo: 'CZE',  language: 'Portuguese' },
+  ntv:             { logo: 'WCT',  language: 'English' },
+  dsports:         { logo: 'DSP',  language: 'Spanish' },
+  m6:              { logo: 'M6',   language: 'French',     mimeType: 'application/dash+xml' },
+  telemundo:       { logo: 'TSN',  language: 'English' },
+  telemundo2:      { logo: 'TMD',  language: 'Spanish' },
+  tsn1:            { logo: 'TSN',  language: 'English' },
+  fussball1:       { logo: 'FBL',  language: 'German' },
+  fussball2:       { logo: 'FBL',  language: 'German' },
+  fussball3:       { logo: 'FBL',  language: 'German' },
+  fussball1uhd:    { logo: 'FBL',  language: 'German',     badge: '4K' },
+  fussball2uhd:    { logo: 'FBL',  language: 'German',     badge: '4K' },
+  fussball3uhd:    { logo: 'FBL',  language: 'German',     badge: '4K' },
+  unite8sports1hd: { logo: 'US1',  language: 'English' },
+  unite8sports2hd: { logo: 'US1',  language: 'Hindi' },
+  ios:             { logo: 'FIFA', language: 'English' },
+  bein1iOS:        { logo: 'BEIN', language: 'Arabic' },
+  Gsinema:         { logo: 'GSN',  language: 'Hindi' },
+  rte2:            { logo: 'RTE',  language: 'English' },
+  canal5mx:        { logo: 'TDN',  language: 'Spanish' },
+  trt1ios:         { logo: 'TRT',  language: 'Turkish' },
+}
+
+// Footapi IDs to skip — covered by the static list with better metadata
+const FOOTAPI_SKIP = new Set(['rte2'])
+
+// Static channels not available from footapi
+const STATIC_STREAMS = [
   // ── 4K ────────────────────────────────────────────────────────────────
   {
-    id: 319,
-    key: 'fifa_fox_sports_4k',
-    name: 'Fox Sports 4K',
+    id: 310,
+    key: 'fifa_tudn_4k',
+    name: 'TUDN 4K',
     match: 'FIFA World Cup 2026 — Live',
-    logo: 'FOX',
+    logo: 'TDN',
     badge: '4K',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — Fox Sports 4K',
-    url: 'https://otte-tim.live.pv-cdn.net/pdx-nitro/live/clients/dash/enc/ajfoeddkbz/out/v1/b78800b9b2304879b15843f455836829/cenc.mpd',
-    keyId:  'f6564ec2aee819046328a0e153be574d',
-    drmKey: 'ff46a8a1031eb27ef22576a077c98ab7',
-  },
-  {
-    id: 321,
-    key: 'fifa_fussball_tv_4k',
-    name: 'Fussball TV 4K',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'FBL',
-    badge: '4K',
-    language: 'German',
-    description: 'FIFA World Cup 2026 — Fussball TV 4K',
-    url: 'https://svc45.main.sl.t-online.de/bpk-tv/KID01037_FUSSBALLTV1_uhd/DASH/index.mpd',
-    keyId:  '1f09d5788fbbb03a053d03cc731f31a9',
-    drmKey: 'd493d5a70c793362324638f61d1726ac',
+    language: 'Spanish',
+    description: 'FIFA World Cup 2026 — TUDN 4K',
+    url: 'https://otte.live.fly.ww.aiv-cdn.net/gru-nitro/live/clients/dash/enc/8u9cregwlt/out/v1/687f6b2a559943549be271504a948ffd/cenc.mpd',
+    keyId:  '1710ac2bbfcd3032d0f6533850968f47',
+    drmKey: 'd2548dacc8efcd1cd0af0373060c82dc',
   },
   // ── HD ────────────────────────────────────────────────────────────────
-  {
-    id: 318,
-    key: 'fifa_fox_sports_1',
-    name: 'Fox Sports 1',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'FOX',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — Fox Sports 1',
-    url: 'https://otte.live.fly.ww.aiv-cdn.net/iad-nitro/live/dash/enc/ap5wz1ofsp/out/v1/7fa6feef143747beaa186ebb6dfb2532/cenc.mpd',
-    keyId:  'c620c93c60c04999eb9ddc28ecfb70a8',
-    drmKey: 'e76a709c251313190e76cb3c3d3a5824',
-  },
   {
     id: 309,
     key: 'fifa_stream_hd',
@@ -62,6 +74,18 @@ const FIFA_STREAMS = [
     drmKey: 'd106ae78b0893da2e4393ece99420baa',
   },
   {
+    id: 318,
+    key: 'fifa_fox_sports_1',
+    name: 'Fox Sports 1',
+    match: 'FIFA World Cup 2026 — Live',
+    logo: 'FOX',
+    language: 'English',
+    description: 'FIFA World Cup 2026 — Fox Sports 1',
+    url: 'https://otte.live.fly.ww.aiv-cdn.net/iad-nitro/live/dash/enc/ap5wz1ofsp/out/v1/7fa6feef143747beaa186ebb6dfb2532/cenc.mpd',
+    keyId:  'c620c93c60c04999eb9ddc28ecfb70a8',
+    drmKey: 'e76a709c251313190e76cb3c3d3a5824',
+  },
+  {
     id: 316,
     key: 'fifa_fussball_tv',
     name: 'Fussball TV',
@@ -72,30 +96,6 @@ const FIFA_STREAMS = [
     url: 'https://svc45.main.sl.t-online.de/bpk-tv/KID01037_FUSSBALLTV1_hd/DASH/index.mpd',
     keyId:  '1cb20afcd9d979c833cfd208c7d3eeb2',
     drmKey: 'fef0c15b4a523370892edd5e4133c269',
-  },
-  {
-    id: 307,
-    key: 'fifa_united_sports_1',
-    name: 'United Sports 1 HD',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'US1',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — United Sports 1 HD',
-    url: 'https://sundirectgo-live.pc.cdn.bitgravity.com/svchd14/dth.mpd',
-    keyId:  '501cb89acad2407e067c8ded661892f5',
-    drmKey: 'bfa0488efaae9ec16775747c80ee54a7',
-  },
-  {
-    id: 308,
-    key: 'fifa_dsports_hd',
-    name: 'D Sports HD',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'DSP',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — D Sports HD',
-    url: 'https://otte.live.fly.ww.aiv-cdn.net/gru-nitro/live/clients/dash/enc/ubehitlwzo/out/v1/8e09c381a51f4366a19e979418112e8f/cenc.mpd',
-    keyId:  'a7d11d37a1f7611ee88d4db880171f32',
-    drmKey: '68f96d618b0b956b008c445896a25a79',
   },
   {
     id: 325,
@@ -120,6 +120,18 @@ const FIFA_STREAMS = [
     url: 'https://simplitv-live.mdn.ors.at/live/eds/zdf_hd/dash4h/zdf_hd.mpd',
     keyId:  'c1a0ac1044a433d0856ccdc08f245084',
     drmKey: '7f0e8800a6d63d7915ac181bb88ce813',
+  },
+  {
+    id: 311,
+    key: 'fifa_unifi_tv',
+    name: 'Unifi TV',
+    match: 'FIFA World Cup 2026 — Live',
+    logo: 'UFI',
+    language: 'English',
+    description: 'FIFA World Cup 2026 — Unifi TV',
+    url: 'https://ngtv-live-cbj.gcdn.co/Content/DASH/Live/channel(fifa1)/master.mpd',
+    keyId:  '10e2114398744f3880cc96653568da55',
+    drmKey: 'd6d40441f9fbebea03ec64c4aea7211f',
   },
   // ── Standard ──────────────────────────────────────────────────────────
   {
@@ -171,18 +183,6 @@ const FIFA_STREAMS = [
     drmKey: '72d631a66e635c60829a0fe7705516c1',
   },
   {
-    id: 306,
-    key: 'fifa_opening_worldcuptv',
-    name: 'World Cup TV',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'WCT',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — World Cup TV',
-    url: 'https://qp-pldt-live-bpk-ucd-prod.akamaized.net/bpk-tv/ch299/default/index.mpd',
-    keyId:  '549ab7cd35a64bb6bb479ecead04d69d',
-    drmKey: '829799ed534d11fcadeb4b192467e050',
-  },
-  {
     id: 320,
     key: 'fifa_rte_sport',
     name: 'RTÉ Sport',
@@ -193,31 +193,6 @@ const FIFA_STREAMS = [
     url: 'https://dai.google.com/linear/dash/pa/event/antwa0EiQm2PoHtx4rBtVw/stream/0c8b0b72-7a38-4852-ab2e-3fd88cbe71cc:GRQ/manifest.mpd',
     keyId:  'd816287e21496989eae1312925a423c5',
     drmKey: '00da00f13180e7e6cd5ce87d1c974e8d',
-  },
-  {
-    id: 311,
-    key: 'fifa_unifi_tv',
-    name: 'Unifi TV',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'UFI',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — Unifi TV',
-    url: 'https://ngtv-live-cbj.gcdn.co/Content/DASH/Live/channel(fifa1)/master.mpd',
-    keyId:  '10e2114398744f3880cc96653568da55',
-    drmKey: 'd6d40441f9fbebea03ec64c4aea7211f',
-  },
-  {
-    id: 317,
-    key: 'fifa_m6_france',
-    name: 'M6 France',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'M6',
-    language: 'French',
-    description: 'FIFA World Cup 2026 — M6 France',
-    url: 'https://origin-m6web.live.6cloud.fr/out/v1/6play/6play-m6/cmaf_cenc00/dash-short-hd.mpd',
-    mimeType: 'application/dash+xml',
-    keyId:  '433ffba670963e70857859a9dff4be04',
-    drmKey: '51ede3a821229fe81e71282c8eff80e3',
   },
   {
     id: 322,
@@ -291,76 +266,49 @@ const FIFA_STREAMS = [
     keyId:  '11223344556677889900112233445566',
     drmKey: '4b80724d0ef86bcb2c21f7999d67739d',
   },
-  {
-    id: 324,
-    key: 'fifa_caze_tv',
-    name: 'Cazé TV',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'CZE',
-    language: 'Portuguese',
-    description: 'FIFA World Cup 2026 — Cazé TV (Brazil)',
-    url: 'https://a121aivottepl-a.akamaihd.net/gru-nitro/live/clients/dash/enc/jo3rmhhp2r/out/v1/50656942ce4e40a1be824c9d83578fe9/cenc.mpd',
-    keyId:  '34475edab991ad5e92548aebd710410a',
-    drmKey: '501b209cccd323ac00bf5ac15b406cb4',
-  },
-  {
-    id: 329,
-    key: 'canal5mx',
-    name: 'Canal 5 TUDN',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'TDN',
-    language: 'Spanish',
-    description: 'FIFA World Cup 2026 — Canal 5 (Mexico)',
-    url: 'https://live-pv-ta.amazon.fastly-edge.com/iad-nitro/live/clients/dash/enc/ntkdl68eob/out/v1/bd5dfb7676994383881bc6e71877d29d/cenc.mpd',
-    keyId:  'd695093ea3e66d75a4d213a3e2cbf360',
-    drmKey: '01be3f645e89a067d2786c295f68dde4',
-  },
-  {
-    id: 327,
-    key: 'fifa_foxusa',
-    name: 'Fox Sports 720p',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'FOX',
-    badge: '720p',
-    language: 'English',
-    description: 'FIFA World Cup 2026 — Fox Sports 720p',
-    url: 'https://abgfgo7aaaaaaaammo4qlji7ci5df.ta.bia-cf.live.pv-cdn.net/pdx-nitro/live/clients/dash/enc/ap5wz1ofsp/out/v1/7fa6feef143747beaa186ebb6dfb2532/cenc.mpd',
-    keyId:  'c620c93c60c04999eb9ddc28ecfb70a8',
-    drmKey: 'e76a709c251313190e76cb3c3d3a5824',
-  },
-  {
-    id: 328,
-    key: 'fifa_bein1ios',
-    name: 'Bein Sports',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'BEIN',
-    language: 'Arabic',
-    description: 'FIFA World Cup 2026 — Bein Sports (iOS)',
-    url: 'https://1nyaler.streamhostingcdn.top/stream/23/index.m3u8',
-    keyId:  null,
-    drmKey: null,
-  },
-  {
-    id: 310,
-    key: 'fifa_tudn_4k',
-    name: 'TUDN 4K',
-    match: 'FIFA World Cup 2026 — Live',
-    logo: 'TDN',
-    badge: '4K',
-    language: 'Spanish',
-    description: 'FIFA World Cup 2026 — TUDN 4K',
-    url: 'https://otte.live.fly.ww.aiv-cdn.net/gru-nitro/live/clients/dash/enc/8u9cregwlt/out/v1/687f6b2a559943549be271504a948ffd/cenc.mpd',
-    keyId:  '1710ac2bbfcd3032d0f6533850968f47',
-    drmKey: 'd2548dacc8efcd1cd0af0373060c82dc',
-  },
 ]
 
-export default function handler(req, res) {
+// Maps a footapi entry to our channel shape
+let _dynId = 400
+function mapFootapi(s) {
+  const meta = FOOTAPI_META[s.id] || {}
+  return {
+    id:          _dynId++,
+    key:         `fifa_dyn_${s.id}`,
+    name:        s.name,
+    match:       'FIFA World Cup 2026 — Live',
+    logo:        meta.logo  ?? s.id.slice(0, 4).toUpperCase(),
+    badge:       meta.badge ?? 'HD',
+    language:    meta.language ?? 'English',
+    description: `FIFA World Cup 2026 — ${s.name}`,
+    url:         s.url,
+    mimeType:    meta.mimeType,
+    keyId:       s.k1 || null,
+    drmKey:      s.k2 || null,
+  }
+}
+
+export default async function handler(req, res) {
   const referer = req.headers['referer'] || req.headers['origin'] || ''
   const allowed = ALLOWED.some((o) => referer.startsWith(o))
   if (!allowed) return res.status(403).end('Forbidden')
 
+  // Fetch dynamic channels from footapi; fall back to empty if unreachable
+  let dynamicChannels = []
+  try {
+    const upstream = await fetch(FOOTAPI_URL, {
+      headers: { origin: FOOTAPI_ORIGIN },
+    })
+    if (upstream.ok) {
+      const data = await upstream.json()
+      _dynId = 400
+      dynamicChannels = data
+        .filter((s) => s.url && !FOOTAPI_SKIP.has(s.id))
+        .map(mapFootapi)
+    }
+  } catch { /* footapi unavailable — serve static only */ }
+
   res.setHeader('Cache-Control', 'no-store, no-cache')
   res.setHeader('Content-Type', 'application/json')
-  res.status(200).json(FIFA_STREAMS)
+  res.status(200).json([...dynamicChannels, ...STATIC_STREAMS])
 }
