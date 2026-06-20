@@ -10,15 +10,15 @@ import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 import { FEATURES } from '../config/features'
 
-// Geo-locked German hosts (Sportdigital Fussball on t-online/Akamai). Route any
-// channel on these hosts through the Frankfurt-pinned /cf-geo proxy so they play
-// without a VPN and can be cast. Applied regardless of which feed supplied the
-// channel, since the remote batch feed can override our static channels.js.
+// Geo-locked German hosts (Sportdigital Fussball on t-online/Akamai).
+// DISABLED: routing these through /cf-geo only works with a residential German
+// proxy (GEO_PROXY_URL) — Akamai 403s datacenter IPs. Until that's set up, leave
+// the URLs untouched so they play DIRECTLY: a user with a German VPN on can watch
+// them as normal. To re-enable server-side geo routing, restore the .replace()
+// below and set GEO_PROXY_URL in Vercel. See api/cf-geo.js.
 const GEO_HOSTS = /^https:\/\/(svc4[0-9]\.main\.sl\.t-online\.de)\//
 function routeGeoChannel(ch) {
-  if (typeof ch?.url === 'string' && GEO_HOSTS.test(ch.url)) {
-    return { ...ch, url: ch.url.replace(GEO_HOSTS, '/cf-geo/$1/') }
-  }
+  // Pass-through for now (direct URL → works with the user's own VPN).
   return ch
 }
 

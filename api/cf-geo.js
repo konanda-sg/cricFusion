@@ -1,67 +1,74 @@
-// Vercel Edge Function — Germany-pinned geo proxy.
-// Some channels (e.g. Sportdigital Fussball on t-online/Akamai) are geo-locked
-// to Germany. This proxy is pinned to the Frankfurt edge (fra1) so the outgoing
-// request originates from Germany, letting these streams play without the user
-// needing a VPN — and, crucially, so a Chromecast (which fetches the stream
-// itself, not through the phone's VPN) can also reach them.
+// Vercel Node Function — Germany geo proxy via a residential proxy upstream.
 //
-// Path-based, like fc-cdn: the channel URL becomes
-//   /cf-geo/<host>/<path>/index.mpd
+// Some channels (Sportdigital Fussball on t-online/Akamai) are geo-locked to
+// Germany AND block datacenter IPs — so a plain Frankfurt datacenter (Vercel
+// fra1) gets 403'd. To pass, we route the outgoing request through a RESIDENTIAL
+// German proxy whose credentials live in the GEO_PROXY_URL env var, e.g.
+//   GEO_PROXY_URL=http://user:pass@de.provider.com:8080
+// Set it in Vercel → Project → Settings → Environment Variables.
+//
+// Path-based, like fc-cdn: the channel URL is /cf-geo/<host>/<path>/index.mpd.
 // The DASH manifest is served from this same proxied path, so Shaka resolves
-// every relative segment request back through here automatically. Absolute URLs
-// inside the manifest are rewritten to stay on the proxy too.
+// every relative segment back through here automatically; absolute upstream URLs
+// are rewritten too. ClearKey decryption stays client-side in Shaka — this only
+// relays bytes from a German residential IP.
 //
-// ClearKey decryption is unaffected — it's done client-side by Shaka using the
-// key in the channel data; this proxy only relays bytes from a German IP.
+// NOTE: residential proxies are metered per-GB and video is heavy. This is
+// deliberately scoped to the t-online Fussball hosts only.
 
-export const config = { runtime: 'edge' }
-export const preferredRegion = 'fra1'   // Frankfurt, Germany
+import { ProxyAgent } from 'undici'
 
-// Only hosts we explicitly allow to be proxied (avoid an open relay).
 const ALLOWED_HOSTS = [
   'svc45.main.sl.t-online.de',
   'svc44.main.sl.t-online.de',
   'svc46.main.sl.t-online.de',
 ]
 
-// Only our own front-ends may call this.
 const ALLOWED_REFERERS = [
   'https://cricfusion.vercel.app',
   'http://localhost:5173',
   'http://localhost:4173',
 ]
 
-export default async function handler(req) {
-  const url = new URL(req.url)
-  const path = url.searchParams.get('path') || ''
+let agent = null
+function getAgent() {
+  const proxy = process.env.GEO_PROXY_URL
+  if (!proxy) return null
+  if (!agent) agent = new ProxyAgent(proxy)
+  return agent
+}
 
-  // Referer-gate browser calls, but allow empty referers: a Chromecast fetches
-  // segments itself and sends no referer. The ALLOWED_HOSTS whitelist below is
-  // the real guard against this being an open relay.
-  const referer = req.headers.get('referer') || req.headers.get('origin') || ''
+export default async function handler(req, res) {
+  // Referer-gate browser calls; allow empty referers (a Chromecast sends none).
+  const referer = req.headers['referer'] || req.headers['origin'] || ''
   if (referer && !ALLOWED_REFERERS.some((o) => referer.startsWith(o))) {
-    return new Response('Forbidden', { status: 403 })
+    return res.status(403).end('Forbidden')
   }
 
-  // path = "<host>/<rest...>". Reconstruct the upstream URL.
+  const path = req.query.path || ''
   const slash = path.indexOf('/')
   const host = slash === -1 ? path : path.slice(0, slash)
   if (!ALLOWED_HOSTS.includes(host)) {
-    return new Response('Host not allowed', { status: 400 })
+    return res.status(400).end('Host not allowed')
   }
 
-  // Preserve any original query string (tokens etc.), minus our 'path' param.
-  const params = new URLSearchParams(url.search)
+  // Preserve original upstream query params (tokens etc.), minus our 'path'.
+  const params = new URLSearchParams(req.query)
   params.delete('path')
   const qs = params.toString()
   const upstream = `https://${path}${qs ? '?' + qs : ''}`
 
+  const dispatcher = getAgent()
+  if (!dispatcher) {
+    return res.status(503).end('Geo proxy not configured (GEO_PROXY_URL missing)')
+  }
+
   let resp
   try {
     resp = await fetch(upstream, {
-      method: req.method,
+      dispatcher,
       headers: {
-        accept: req.headers.get('accept') || '*/*',
+        accept: req.headers['accept'] || '*/*',
         'accept-language': 'de-DE,de;q=0.9,en;q=0.8',
         'user-agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
@@ -71,31 +78,28 @@ export default async function handler(req) {
       },
     })
   } catch (e) {
-    return new Response('Geo proxy fetch error: ' + e.message, { status: 502 })
+    return res.status(502).end('Geo proxy fetch error: ' + e.message)
   }
 
   if (!resp.ok) {
-    return new Response(`Upstream ${resp.status}`, { status: resp.status })
+    return res.status(resp.status).end(`Upstream ${resp.status}`)
   }
 
   const ct = resp.headers.get('content-type') || 'application/octet-stream'
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-cache, no-store',
-    'Content-Type': ct,
-  }
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cache-Control', 'no-cache, no-store')
+  res.setHeader('Content-Type', ct)
 
-  // Rewrite absolute upstream URLs inside the DASH manifest so segment fetches
-  // also route through this proxy. Relative URLs need no rewrite — they resolve
-  // against this same /cf-geo/ path.
+  // Rewrite absolute upstream URLs in the DASH manifest back through this proxy.
   if (ct.includes('dash+xml') || path.endsWith('.mpd')) {
     let text = await resp.text()
     for (const h of ALLOWED_HOSTS) {
       text = text.split(`https://${h}/`).join(`/cf-geo/${h}/`)
     }
-    return new Response(text, { status: 200, headers })
+    return res.status(200).send(text)
   }
 
   // Stream binary segments straight through.
-  return new Response(resp.body, { status: 200, headers })
+  const buf = Buffer.from(await resp.arrayBuffer())
+  return res.status(200).send(buf)
 }
