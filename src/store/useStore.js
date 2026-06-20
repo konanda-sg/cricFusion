@@ -10,6 +10,18 @@ import { parseM3u, mapM3uChannel } from '../utils/parseM3u'
 import { isDevToolsOpen } from '../utils/devtools-guard'
 import { FEATURES } from '../config/features'
 
+// Geo-locked German hosts (Sportdigital Fussball on t-online/Akamai). Route any
+// channel on these hosts through the Frankfurt-pinned /cf-geo proxy so they play
+// without a VPN and can be cast. Applied regardless of which feed supplied the
+// channel, since the remote batch feed can override our static channels.js.
+const GEO_HOSTS = /^https:\/\/(svc4[0-9]\.main\.sl\.t-online\.de)\//
+function routeGeoChannel(ch) {
+  if (typeof ch?.url === 'string' && GEO_HOSTS.test(ch.url)) {
+    return { ...ch, url: ch.url.replace(GEO_HOSTS, '/cf-geo/$1/') }
+  }
+  return ch
+}
+
 const PROXY         = '/cf-data'      // SW → jtvv.pages.dev/channels.json
 const DYNAMIC_PROXY = '/cf-dynamic'   // SW → newwwwapiiiiii.vercel.app/main?id=...
 const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-events
@@ -237,7 +249,7 @@ export const useStore = create((set, get) => ({
         if (seen.has(ch.key)) return false
         seen.add(ch.key)
         return true
-      })
+      }).map(routeGeoChannel)
       set({
         channels: deduped,
         channelsLoading: false,
