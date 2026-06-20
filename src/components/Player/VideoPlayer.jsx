@@ -114,6 +114,16 @@ export default function VideoPlayer({ channel }) {
   const [devicesPresent, setDevicesPresent] = useState(false)    // any Cast receiver visible on the network
   const [castHint, setCastHint]             = useState(false)    // show "VPN blocking TV" guide
   const [airPlayAvailable, setAirPlayAvailable] = useState(false)
+  const [shakaReady, setShakaReady] = useState(() => typeof window !== 'undefined' && !!window.__shakaReady)
+
+  // Shaka is loaded deferred (non-blocking). If a DASH stream is requested
+  // before it finishes, wait for the 'shakaready' event then re-run setup.
+  useEffect(() => {
+    if (shakaReady) return
+    const onReady = () => setShakaReady(true)
+    window.addEventListener('shakaready', onReady, { once: true })
+    return () => window.removeEventListener('shakaready', onReady)
+  }, [shakaReady])
 
   const [state, setState] = useState({
     playing: false,
@@ -318,6 +328,10 @@ export default function VideoPlayer({ channel }) {
 
       const shaka = window.shaka
       if (!shaka) {
+        // Deferred script not ready yet — stay in loading; the shakaready
+        // listener flips shakaReady and re-runs this effect. Only error if it's
+        // been long enough that the script genuinely failed to load.
+        if (!window.__shakaReady) return
         update({ error: 'Shaka Player not loaded. Check your connection.', loading: false })
         return
       }
@@ -735,7 +749,7 @@ export default function VideoPlayer({ channel }) {
     video.src = channel.originalUrl || channel.url
     video.play().catch(() => {})
     update({ loading: false })
-  }, [channel?.url, channel?.clearKey?.keyId])
+  }, [channel?.url, channel?.clearKey?.keyId, shakaReady])
 
   // ── Video element events ───────────────────────────────────────────────
   useEffect(() => {

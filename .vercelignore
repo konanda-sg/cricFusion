@@ -1,0 +1,16 @@
+# Vercel Hobby plan allows max 12 Serverless Functions per deployment.
+# These API functions belong to the Tata Play integration, which is disabled
+# (FEATURES.TATAPLAY = false in src/config/features.js) and never called in
+# production. Excluding them from deployment keeps us under the limit.
+#
+# To re-enable Tata Play: set FEATURES.TATAPLAY = true AND remove the relevant
+# lines below so the functions deploy again.
+#
+# NOTE: api/tp-mpd-proxy.js and api/tp-license.js are intentionally NOT ignored —
+# they're still used by the enabled Custom M3U Playlist feature (src/utils/parseM3u.js).
+
+api/tp-channels.js
+api/tp-otp.js
+api/tp-login.js
+api/tp-wv-license.js
+api/tp-mpd.js

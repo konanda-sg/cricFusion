@@ -26,8 +26,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-    <!-- Shaka Player for DASH/MPD + ClearKey DRM streams -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.min.js"></script>
+    <!-- Shaka Player for DASH/MPD + ClearKey DRM streams.
+         Deferred so it never blocks first paint — it's only needed once a DASH
+         stream actually plays. The player waits for window.shaka before use. -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.7.11/shaka-player.compiled.min.js"
+            onload="window.__shakaReady=true;window.dispatchEvent(new Event('shakaready'))"></script>
 
     <!-- Google Cast SDK — dispatches 'castready' when available -->
     <script>window['__onGCastApiAvailable']=function(ok){if(ok){window.__castReady=true;window.dispatchEvent(new Event('castready'))}}</script>

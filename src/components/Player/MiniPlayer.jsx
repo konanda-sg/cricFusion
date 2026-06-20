@@ -9,6 +9,7 @@ export default function MiniPlayer({ channel, isAudioActive, onActivate, onRemov
   const [loading, setLoading]   = useState(true)
   const [error,   setError]     = useState(null)
   const [quality, setQuality]   = useState('')
+  const [shakaTick, setShakaTick] = useState(0)   // bumped when deferred Shaka loads
 
   useEffect(() => {
     const video = videoRef.current
@@ -24,7 +25,14 @@ export default function MiniPlayer({ channel, isAudioActive, onActivate, onRemov
 
     if (isMPD) {
       const shaka = window.shaka
-      if (!shaka) { setError('Unsupported'); setLoading(false); return }
+      if (!shaka) {
+        // Shaka is deferred; if not ready yet, retry once it loads.
+        if (!window.__shakaReady) {
+          window.addEventListener('shakaready', () => { if (!cancelled) setShakaTick((n) => n + 1) }, { once: true })
+          return
+        }
+        setError('Unsupported'); setLoading(false); return
+      }
       shaka.polyfill.installAll()
       const player = new shaka.Player()
       shakaRef.current = player
@@ -78,7 +86,7 @@ export default function MiniPlayer({ channel, isAudioActive, onActivate, onRemov
     video.play().catch(() => {})
     setLoading(false)
     return () => { cancelled = true }
-  }, [channel?.url])
+  }, [channel?.url, shakaTick])
 
   useEffect(() => {
     const v = videoRef.current; if (!v) return

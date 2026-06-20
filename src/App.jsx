@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { WifiOff, Wifi, X, RefreshCw } from 'lucide-react'
 import { useStore } from './store/useStore'
@@ -7,13 +7,17 @@ import { fetchSiteStatus } from './utils/site-status'
 import Header from './components/Layout/Header'
 import BottomNav from './components/Layout/BottomNav'
 import Home from './pages/Home'
-import Search from './pages/Search'
-import Sports from './pages/Sports'
-import Account from './pages/Account'
-import Watch from './pages/Watch'
-import MultiView from './pages/MultiView'
-import OwnerRef from './pages/OwnerRef'
 import { FEATURES } from './config/features'
+
+// Route-level code splitting: the heavy player tree (Watch/MultiView pull in
+// hls.js + the player) and rarely-visited pages load on demand, keeping the
+// initial bundle (Home) small.
+const Search    = lazy(() => import('./pages/Search'))
+const Sports    = lazy(() => import('./pages/Sports'))
+const Account   = lazy(() => import('./pages/Account'))
+const Watch     = lazy(() => import('./pages/Watch'))
+const MultiView = lazy(() => import('./pages/MultiView'))
+const OwnerRef  = lazy(() => import('./pages/OwnerRef'))
 
 // Inner component so useLocation works inside BrowserRouter
 function AppContent() {
@@ -32,15 +36,17 @@ function AppContent() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="flex flex-1 w-full overflow-hidden"
           >
-            <Routes location={location}>
-              <Route path="/"         element={<Home />} />
-              <Route path="/search"   element={<Search />} />
-              <Route path="/sports"   element={<Sports />} />
-              <Route path="/account"  element={<Account />} />
-              <Route path="/watch/:id"   element={<Watch />} />
-              {FEATURES.MULTIVIEW && <Route path="/multiview" element={<MultiView />} />}
-              <Route path="/cf-owner" element={<OwnerRef />} />
-            </Routes>
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-white/15 border-t-brand-500 animate-spin" /></div>}>
+              <Routes location={location}>
+                <Route path="/"         element={<Home />} />
+                <Route path="/search"   element={<Search />} />
+                <Route path="/sports"   element={<Sports />} />
+                <Route path="/account"  element={<Account />} />
+                <Route path="/watch/:id"   element={<Watch />} />
+                {FEATURES.MULTIVIEW && <Route path="/multiview" element={<MultiView />} />}
+                <Route path="/cf-owner" element={<OwnerRef />} />
+              </Routes>
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </div>
