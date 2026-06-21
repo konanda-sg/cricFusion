@@ -22,10 +22,15 @@ function MatchTitle({ title }) {
 
 const INTERVAL_MS = 6000
 
+// Featured channels pinned to the hero carousel, in display order (by channel id).
+const FEATURED_IDS = [1002, 1005, 1028, 1029, 407]
+
 export default function HeroSection() {
   const navigate    = useNavigate()
   const channels    = useStore((s) => s.channels)
-  const liveList    = channels.filter((c) => c.isLive && c.thumbnail).slice(0, 6)
+  const liveList    = FEATURED_IDS
+    .map((id) => channels.find((c) => String(c.id) === String(id)))
+    .filter(Boolean)
   const [idx, setIdx]         = useState(0)
   const [imgFailed, setImgFailed] = useState(false)
   const [paused, setPaused]   = useState(false)
