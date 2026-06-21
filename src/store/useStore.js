@@ -143,118 +143,147 @@ export const useStore = create((set, get) => ({
       ? `${DYNAMIC_PROXY}?id=${id}`
       : `https://newwwwapiiiiii.vercel.app/main?id=${id}`
 
-    try {
-      // Fire all APIs in parallel — SW proxies so real URLs stay hidden
-      const [batchResult, fanCodeResult, sonyLivResult, fifaResult, iptvResult, ...dynamicResults] = await Promise.allSettled([
-        fetch(batchUrl).then((r) => r.text()),
-        fetch(fanCodeUrl).then((r) => r.text()),
-        fetch(sonyLivUrl).then((r) => r.text()),
-        fetch(FIFA_PROXY).then((r) => r.text()),
-        fetch(IPTV_PROXY).then((r) => r.text()),
-        ...DYNAMIC_CHANNEL_IDS.map((id) => fetch(dynUrl(id)).then((r) => r.text())),
-      ])
+    // Per-source channel buckets. Each API writes its slice here as it
+    // resolves; commit() re-merges in a stable order so a slow endpoint never
+    // blocks the others from rendering.
+    const sources = {
+      api:      [],
+      dynamic:  [],
+      fifa:     [],
+      fancode:  [],
+      sonyliv:  [],
+      tp:       [],
+      m3u:      [],
+    }
+    // Fixed render order — independent of which fetch finishes first.
+    const ORDER = ['api', 'dynamic', 'fifa', 'fancode', 'sonyliv', 'tp', 'm3u']
 
-      // ── Batch channels (jtvv) ──────────────────────────────────────────
-      let apiChannels = []
-      if (batchResult.status === 'fulfilled') {
-        const json = decode(batchResult.value, swActive)
-        if (json) {
-          const ordered = [
-            ...CHANNEL_ORDER,
-            ...Object.keys(json).filter((k) => !CHANNEL_ORDER.includes(k)),
-          ]
-          apiChannels = ordered
-            .filter((key) => json[key])
-            .map((key, i) => mapApiChannel(key, json[key], i + 1))
-        }
-      }
-
-      // ── FanCode live events ────────────────────────────────────────────
-      let fanCodeChannels = []
-      if (fanCodeResult.status === 'fulfilled') {
-        const json = decode(fanCodeResult.value, swActive)
-        fanCodeChannels = (json?.matches || [])
-          .filter((m) => m.status === 'LIVE' && (m.adfree_url || m.dai_url))
-          .map(mapFanCodeChannel)
-      }
-
-      // ── Sony LIV live events ───────────────────────────────────────────
-      let sonyLivChannels = []
-      if (sonyLivResult.status === 'fulfilled') {
-        const json = decode(sonyLivResult.value, swActive)
-        sonyLivChannels = (json?.matches || [])
-          .filter((m) => m.isLive && (m.dai_url || m.pub_url || m.video_url))
-          .map((m, i) => mapSonyLivChannel(m, 300 + i + 1))
-      }
-
-      // ── FIFA 2026 streams (footapi, server-side Referer-locked) ──────────
-      let fifaChannels = []
-      if (fifaResult.status === 'fulfilled') {
-        const json = decode(fifaResult.value, swActive)
-        fifaChannels = (Array.isArray(json) ? json : []).map(mapFifaChannel)
-      }
-
-      // ── iptv-eldbert FIFA/World Cup channels (always-fresh HLS) ──────────
-      if (iptvResult.status === 'fulfilled') {
-        const json = decode(iptvResult.value, swActive)
-        const iptvChannels = (Array.isArray(json) ? json : []).map(mapFifaChannel)
-        fifaChannels = [...fifaChannels, ...iptvChannels]
-      }
-
-      // ── Per-channel dynamic channels ───────────────────────────────────
-      const dynamicChannels = dynamicResults
-        .map((result, i) => {
-          if (result.status !== 'fulfilled') return null
-          const data = decode(result.value, swActive)
-          if (!data || !data.url) return null
-          return mapDynamicChannel(data, 200 + i + 1)
-        })
-        .filter(Boolean)
-
-      // ── Tata Play (native OTP login — loads all channels from API) ────────
-      let tpApiChannels = []
-      if (FEATURES.TATAPLAY) {
-        const tpCreds = get().tpCreds
-        if (tpCreds?.subscriberId && tpCreds?.userAuthenticateToken) {
-          try {
-            const tpResp = await fetch(
-              `/api/tp-channels?sub=${encodeURIComponent(tpCreds.subscriberId)}&tok=${encodeURIComponent(tpCreds.userAuthenticateToken)}`
-            )
-            const tpData = await tpResp.json()
-            tpApiChannels = tpData.channels || []
-          } catch (e) {
-            console.warn('Tata Play channels load failed:', e)
-          }
-        }
-      }
-
-      // ── Custom M3U playlist (fallback for non-TP IPTV sources) ────────────
-      let m3uChannels = []
-      const m3uUrl = get().m3uUrl
-      if (m3uUrl) {
-        try {
-          const text = await fetch(`/api/m3u-proxy?url=${encodeURIComponent(m3uUrl)}`).then((r) => r.text())
-          const parsed = parseM3u(text)
-          m3uChannels = parsed
-            .filter((ch) => !tpApiChannels.length || !ch.licenseServer?.includes('tp.drmlive-01.workers.dev'))
-            .map((ch, i) => mapM3uChannel(ch, 400 + i + 1))
-        } catch (e) {
-          console.warn('M3U load failed:', e)
-        }
-      }
-
-      const allChannels = [...apiChannels, ...dynamicChannels, ...fifaChannels, ...fanCodeChannels, ...sonyLivChannels, ...tpApiChannels, ...m3uChannels, ...STATIC_CHANNELS, ...IPTV_SPORTS_CHANNELS, ...(FEATURES.IPTV_TAMIL ? IPTV_TAMIL_CHANNELS : [])]
+    const commit = (extra = {}) => {
+      const allChannels = [
+        ...ORDER.flatMap((k) => sources[k]),
+        ...STATIC_CHANNELS,
+        ...IPTV_SPORTS_CHANNELS,
+        ...(FEATURES.IPTV_TAMIL ? IPTV_TAMIL_CHANNELS : []),
+      ]
       const seen = new Set()
       const deduped = allChannels.filter((ch) => {
         if (seen.has(ch.key)) return false
         seen.add(ch.key)
         return true
       }).map(routeGeoChannel)
-      set({
-        channels: deduped,
-        channelsLoading: false,
-        lastFetched:     Date.now(),
-      })
+      set({ channels: deduped, ...extra })
+    }
+
+    // Each source updates its bucket then commits independently, so channels
+    // appear as soon as their own API responds — the slowest one no longer
+    // holds back the rest.
+    const tasks = []
+
+    // ── Batch channels (jtvv) ──────────────────────────────────────────
+    tasks.push(
+      fetch(batchUrl).then((r) => r.text()).then((text) => {
+        const json = decode(text, swActive)
+        if (!json) return
+        const ordered = [
+          ...CHANNEL_ORDER,
+          ...Object.keys(json).filter((k) => !CHANNEL_ORDER.includes(k)),
+        ]
+        sources.api = ordered
+          .filter((key) => json[key])
+          .map((key, i) => mapApiChannel(key, json[key], i + 1))
+        commit()
+      }).catch((e) => console.warn('Batch channels load failed:', e))
+    )
+
+    // ── FanCode live events ────────────────────────────────────────────
+    tasks.push(
+      fetch(fanCodeUrl).then((r) => r.text()).then((text) => {
+        const json = decode(text, swActive)
+        sources.fancode = (json?.matches || [])
+          .filter((m) => m.status === 'LIVE' && (m.adfree_url || m.dai_url))
+          .map(mapFanCodeChannel)
+        commit()
+      }).catch((e) => console.warn('FanCode load failed:', e))
+    )
+
+    // ── Sony LIV live events ───────────────────────────────────────────
+    tasks.push(
+      fetch(sonyLivUrl).then((r) => r.text()).then((text) => {
+        const json = decode(text, swActive)
+        sources.sonyliv = (json?.matches || [])
+          .filter((m) => m.isLive && (m.dai_url || m.pub_url || m.video_url))
+          .map((m, i) => mapSonyLivChannel(m, 300 + i + 1))
+        commit()
+      }).catch((e) => console.warn('Sony LIV load failed:', e))
+    )
+
+    // ── FIFA 2026 + iptv-eldbert streams ───────────────────────────────
+    // Two endpoints feed the same bucket; merge whichever arrives.
+    let fifaPart = [], iptvPart = []
+    const commitFifa = () => { sources.fifa = [...fifaPart, ...iptvPart]; commit() }
+    tasks.push(
+      fetch(FIFA_PROXY).then((r) => r.text()).then((text) => {
+        const json = decode(text, swActive)
+        fifaPart = (Array.isArray(json) ? json : []).map(mapFifaChannel)
+        commitFifa()
+      }).catch((e) => console.warn('FIFA load failed:', e))
+    )
+    tasks.push(
+      fetch(IPTV_PROXY).then((r) => r.text()).then((text) => {
+        const json = decode(text, swActive)
+        iptvPart = (Array.isArray(json) ? json : []).map(mapFifaChannel)
+        commitFifa()
+      }).catch((e) => console.warn('IPTV FIFA load failed:', e))
+    )
+
+    // ── Per-channel dynamic channels ───────────────────────────────────
+    DYNAMIC_CHANNEL_IDS.forEach((id, i) => {
+      tasks.push(
+        fetch(dynUrl(id)).then((r) => r.text()).then((text) => {
+          const data = decode(text, swActive)
+          if (!data || !data.url) return
+          sources.dynamic[i] = mapDynamicChannel(data, 200 + i + 1)
+          // strip empty slots from channels that failed/not-yet-arrived
+          commit()
+        }).catch((e) => console.warn('Dynamic channel load failed:', e))
+      )
+    })
+
+    // ── Tata Play (native OTP login — loads all channels from API) ────────
+    if (FEATURES.TATAPLAY) {
+      const tpCreds = get().tpCreds
+      if (tpCreds?.subscriberId && tpCreds?.userAuthenticateToken) {
+        tasks.push(
+          fetch(`/api/tp-channels?sub=${encodeURIComponent(tpCreds.subscriberId)}&tok=${encodeURIComponent(tpCreds.userAuthenticateToken)}`)
+            .then((r) => r.json()).then((tpData) => {
+              sources.tp = tpData.channels || []
+              commit()
+            }).catch((e) => console.warn('Tata Play channels load failed:', e))
+        )
+      }
+    }
+
+    // ── Custom M3U playlist (fallback for non-TP IPTV sources) ────────────
+    const m3uUrl = get().m3uUrl
+    if (m3uUrl) {
+      tasks.push(
+        fetch(`/api/m3u-proxy?url=${encodeURIComponent(m3uUrl)}`).then((r) => r.text()).then((text) => {
+          const parsed = parseM3u(text)
+          sources.m3u = parsed
+            .filter((ch) => !sources.tp.length || !ch.licenseServer?.includes('tp.drmlive-01.workers.dev'))
+            .map((ch, i) => mapM3uChannel(ch, 400 + i + 1))
+          commit()
+        }).catch((e) => console.warn('M3U load failed:', e))
+      )
+    }
+
+    // Clear the loading flag once everything has settled (errors already
+    // handled per-task), but channels were rendered progressively above.
+    try {
+      await Promise.allSettled(tasks)
+      // dynamic bucket may have holes from failed ids — compact before final commit
+      sources.dynamic = sources.dynamic.filter(Boolean)
+      commit({ channelsLoading: false, lastFetched: Date.now() })
     } catch (err) {
       console.error('Failed to load channels:', err)
       set({ channelsLoading: false, channelsError: err.message })
