@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import {
   CHANNEL_ORDER, STATIC_CHANNELS, mapApiChannel,
   DYNAMIC_CHANNEL_IDS, mapDynamicChannel, mapFanCodeChannel, mapSonyLivChannel,
-  mapFifaChannel,
+  mapFifaChannel, mapStarSonyChannel,
 } from '../data/channels'
 import { IPTV_SPORTS_CHANNELS } from '../data/iptv-sports'
 import { IPTV_TAMIL_CHANNELS } from '../data/iptv-tamil'
@@ -28,6 +28,9 @@ const FANCODE_PROXY = '/cf-fancode'   // SW → github drmlive/fancode-live-even
 const SONYLIV_PROXY = '/cf-sonyliv'   // SW → github drmlive/sliv-live-events
 const FIFA_PROXY    = '/cf-fifa'      // SW → /api/cf-fifa (server-side, Referer-locked)
 const IPTV_PROXY    = '/cf-iptv'      // SW → /api/cf-iptv (iptv-eldbert FIFA channels)
+// Star/Sony Sports: Jio CDN DASH + ClearKey + short-lived token. CORS-open, so
+// fetched directly (no SW proxy needed).
+const STARSONY_URL  = 'https://sayan-json-4.pages.dev/Data/sports.json'
 
 // SW base64-encodes responses; decode back to JSON string.
 // Falls back to plain JSON when SW is active but an old SW version fell
@@ -152,11 +155,12 @@ export const useStore = create((set, get) => ({
       fifa:     [],
       fancode:  [],
       sonyliv:  [],
+      starsony: [],
       tp:       [],
       m3u:      [],
     }
     // Fixed render order — independent of which fetch finishes first.
-    const ORDER = ['api', 'dynamic', 'fifa', 'fancode', 'sonyliv', 'tp', 'm3u']
+    const ORDER = ['api', 'dynamic', 'fifa', 'fancode', 'sonyliv', 'starsony', 'tp', 'm3u']
 
     const commit = (extra = {}) => {
       const allChannels = [
@@ -234,6 +238,16 @@ export const useStore = create((set, get) => ({
         iptvPart = (Array.isArray(json) ? json : []).map(mapFifaChannel)
         commitFifa()
       }).catch((e) => console.warn('IPTV FIFA load failed:', e))
+    )
+
+    // ── Star / Sony Sports (sayan-json-4) ──────────────────────────────
+    tasks.push(
+      fetch(STARSONY_URL, { cache: 'no-store' }).then((r) => r.json()).then((json) => {
+        sources.starsony = (json?.channels || [])
+          .map((c, i) => mapStarSonyChannel(c, 500 + i + 1))
+          .filter(Boolean)
+        commit()
+      }).catch((e) => console.warn('Star/Sony load failed:', e))
     )
 
     // ── Per-channel dynamic channels ───────────────────────────────────

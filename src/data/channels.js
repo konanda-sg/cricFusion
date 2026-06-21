@@ -246,6 +246,55 @@ export function mapSonyLivChannel(match, id) {
   }
 }
 
+// ── Star / Sony Sports (sayan-json-4 sports.json) ────────────────────────────
+// Live-fetched JSON of Jio CDN DASH streams + ClearKey + short-lived __hdnea__
+// cookie token. Same shape the existing player already handles (DASH + ClearKey
+// + token re-appended on segments). Tokens expire in hours → always fetch live.
+const STARSONY_LOGO = (name) => {
+  const m = name.match(/Star Sports\s*(\d+)/i)
+  if (m) return `SS${m[1]}`
+  const s = name.match(/Sony.*?(\d+)/i)
+  if (s) return `SL${s[1]}`
+  return name.split(/\s+/).map((w) => w[0]).join('').slice(0, 4).toUpperCase()
+}
+function starsonyLanguage(name) {
+  if (/hindi/i.test(name))   return 'Hindi'
+  if (/tamil/i.test(name))   return 'Tamil'
+  if (/telugu/i.test(name))  return 'Telugu'
+  if (/kannada/i.test(name)) return 'Kannada'
+  if (/marathi/i.test(name)) return 'Marathi'
+  if (/bangla|bengali/i.test(name)) return 'Bengali'
+  return 'English'
+}
+
+export function mapStarSonyChannel(c, id) {
+  if (!c?.stream_url) return null
+  // Append the __hdnea__ token to the manifest URL; the player re-appends it on
+  // each segment request via extractToken().
+  const token = (c.cookie || '').trim()
+  const url = token
+    ? `${c.stream_url}${c.stream_url.includes('?') ? '&' : '?'}${token}`
+    : c.stream_url
+  return {
+    id,
+    key:          `starsony_${c.id}`,
+    name:         c.name?.trim() || c.id,
+    category:     'starsony',
+    currentMatch: `${c.name?.trim() || c.id} — Live`,
+    thumbnail:    T('1540747913346-19212a4b423f'),
+    logo:         STARSONY_LOGO(c.name || c.id),
+    isLive:       true,
+    viewers:      '—',
+    badge:        /\bHD\b/i.test(c.name || '') ? 'HD' : 'SD',
+    language:     starsonyLanguage(c.name || ''),
+    description:  `${c.name?.trim() || c.id} — Live Sports`,
+    score:        null,
+    url,
+    clearKey:     c.key_id && c.key ? { keyId: c.key_id, key: c.key } : null,
+    quality:      ['Auto', '1080p', '720p', '480p'],
+  }
+}
+
 // ── FIFA 2026 channels — fetched at runtime via /cf-fifa (server-side) ───────
 // URLs and clearKeys are NOT in this bundle. See api/cf-fifa.js.
 export function mapFifaChannel(s) {
@@ -306,10 +355,10 @@ export const STATIC_CHANNELS = [
     language: 'English',
     description: 'Willow Cricbuzz TV — Live Cricket',
     score: null,
-    url: 'https://a57live-pv-ta-amazon.akamaized.net/iad-nitro/live/clients/dash/enc/4wja3cfwgg/out/v1/991189690f8b4dd68e0c674f6a398c39/cenc.mpd',
+    url: 'https://a57live-pv-ta-amazon.akamaized.net/iad-nitro/live/clients/dash/enc/ty2hlbyyk3/out/v1/0e4990351b97426db382b30cb01cf645/cenc.mpd',
     clearKey: {
-      keyId: '979b2f5b62f09438e96fb1fe44b820e2',
-      key:   'b976ab1bf969845cf9e4fee85f456c8d',
+      keyId: '8094deb4bf11428aa0d663b3168bc69d',
+      key:   'da904540e06da7a77270d63422cb0f69',
     },
     quality: ['Auto', '1080p', '720p', '480p'],
   },
@@ -673,6 +722,64 @@ export const STATIC_CHANNELS = [
     clearKey: null,
     quality: ['Auto', '1080p', '720p', '480p'],
   },
+  // ── Plain-HLS channels extracted from loura.json / id.json (?url= params) ──
+  // No DRM; play natively. Grouped under the Star/Sony section.
+  {
+    id: 145, key: 'zee5bangla', name: 'Zee Bangla Sonar', category: 'starsony',
+    currentMatch: 'Zee Bangla Sonar — Live', thumbnail: T('1546519638405-a9f1e9a4f7c5'),
+    logo: 'ZBNG', isLive: true, viewers: '—', badge: 'HD', language: 'Bengali',
+    description: 'Zee Bangla Sonar — Live', score: null,
+    url: 'https://d1g8wgjurz8via.cloudfront.net/bpk-tv/ColorsHD/default/master2.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 146, key: 'zeesportshindi', name: 'Zee Sports Hindi', category: 'starsony',
+    currentMatch: 'Zee Sports Hindi — Live', thumbnail: T('1540747913346-19212a4b423f'),
+    logo: 'ZSH', isLive: true, viewers: '—', badge: 'HD', language: 'Hindi',
+    description: 'Zee Sports Hindi — Live', score: null,
+    url: 'https://d1g8wgjurz8via.cloudfront.net/bpk-tv/NGCHD/default/master2.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 147, key: 'zee5malayalam', name: 'Zee5 Malayalam', category: 'starsony',
+    currentMatch: 'Zee5 Malayalam — Live', thumbnail: T('1546519638405-a9f1e9a4f7c5'),
+    logo: 'ZML', isLive: true, viewers: '—', badge: 'HD', language: 'Malayalam',
+    description: 'Zee5 Malayalam — Live', score: null,
+    url: 'https://tk.lolcc.cfd/v/9c07cc0936d81598f5cd45853a82dbf0/467e27b87b4b/index.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 148, key: 'beinsportsarabic', name: 'Bein Sports Arabic', category: 'starsony',
+    currentMatch: 'Bein Sports Arabic — Live', thumbnail: T('1508098280132-0cd47883c18c'),
+    logo: 'BEIN', isLive: true, viewers: '—', badge: 'HD', language: 'Arabic',
+    description: 'Bein Sports Arabic — Live', score: null,
+    url: 'https://live.kooran53.cfd/goolato3.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 149, key: 'asiacup', name: 'Asia Cup Live', category: 'starsony',
+    currentMatch: 'Asia Cup — Live', thumbnail: T('1531415074968-036ba1b575da'),
+    logo: 'ASIA', isLive: true, viewers: '—', badge: 'HD', language: 'English',
+    description: 'Asia Cup — Live Cricket', score: null,
+    url: 'https://d3ssd0juqbxbw.cloudfront.net/mtvsinstlive/master.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 150, key: 'dillzy', name: 'Dillzy Cricket', category: 'starsony',
+    currentMatch: 'Dillzy Cricket — Live', thumbnail: T('1540747913346-19212a4b423f'),
+    logo: 'DLZ', isLive: true, viewers: '—', badge: 'HD', language: 'English',
+    description: 'Dillzy Cricket — Live', score: null,
+    url: 'https://dillzy.cricketstream745.workers.dev/live.m3u8',
+    clearKey: null, quality: ['Auto', '1080p', '720p', '480p'],
+  },
+  {
+    id: 151, key: '7pluscricket', name: '7Plus Cricket', category: 'starsony',
+    currentMatch: '7Plus Cricket — Live', thumbnail: T('1531415074968-036ba1b575da'),
+    logo: '7PL', isLive: true, viewers: '—', badge: '720p', language: 'English',
+    description: '7Plus Cricket — Live', score: null,
+    url: 'https://hugh.cdn.rumble.cloud/live/gi29le7p/slot-139/bx1o-9vac_720p/chunklist.m3u8',
+    clearKey: null, quality: ['Auto', '720p', '480p'],
+  },
 ]
 
 // ── FIFA channel status map ───────────────────────────────────────────────────
@@ -700,6 +807,7 @@ export const categories = [
   { id: 'all',         label: 'Trending',     icon: '🔥' },
   { id: 'fifa2026',    label: 'FIFA 2026',    icon: '🏆' },
   { id: 'fancode',     label: 'FanCode',      icon: '⚡' },
+  { id: 'starsony',    label: 'Star / Sony',  icon: '⭐' },
   { id: 'sonyliv',     label: 'Sony LIV',     icon: '📺' },
   { id: 'iptvsports',  label: 'IPTV Sports',  icon: '📡' },
   { id: 'tamil',       label: 'Tamil',        icon: '🎬' },

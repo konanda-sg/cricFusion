@@ -7,6 +7,7 @@ import { Users, Search, X, ChevronDown, ChevronRight } from 'lucide-react'
 const SPORT_CATS = [
   { id: 'all',        label: 'All',      icon: '🔥' },
   { id: 'fifa2026',   label: 'FIFA',     icon: '🏆' },
+  { id: 'starsony',   label: 'Star/Sony',icon: '⭐' },
   { id: 'cricket',    label: 'Cricket',  icon: '🏏' },
   { id: 'football',   label: 'Football', icon: '⚽' },
   { id: 'tennis',     label: 'Tennis',   icon: '🎾' },
@@ -19,7 +20,7 @@ const SPORT_CATS = [
 ]
 
 // order for "All" grouped view
-const GROUP_ORDER = ['fifa2026','cricket','football','tennis','basketball','formula1','boxing','multi','iptvsports','tamil']
+const GROUP_ORDER = ['fifa2026','starsony','cricket','football','tennis','basketball','formula1','boxing','multi','iptvsports','tamil']
 const GROUP_META  = Object.fromEntries(SPORT_CATS.map((c) => [c.id, c]))
 
 // ── Channel row ───────────────────────────────────────────────────────────────
