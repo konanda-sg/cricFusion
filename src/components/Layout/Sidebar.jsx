@@ -27,6 +27,7 @@ function ChannelRow({ ch, isActive, isSameCat, activeRef, onClick }) {
   return (
     <motion.button
       ref={isActive ? activeRef : null}
+      data-active={isActive ? 'true' : undefined}
       whileHover={{ x: 3 }}
       onClick={onClick}
       className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all ${
@@ -76,7 +77,13 @@ function ChannelRow({ ch, isActive, isSameCat, activeRef, onClick }) {
 
 // ── Collapsible group section ─────────────────────────────────────────────────
 function GroupSection({ cat, channels, currentChannelId, activeRef, navigate, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const hasActive = channels.some((c) => c.id === currentChannelId)
+  // `null` = follow default; once the user toggles, honour their choice.
+  const [userOpen, setUserOpen] = useState(null)
+  // The group holding the active channel stays open so its row is in the DOM
+  // and can be centered when the selection changes.
+  const open = hasActive ? true : (userOpen ?? defaultOpen)
+  const setOpen = (fn) => setUserOpen((prev) => (typeof fn === 'function' ? fn(prev ?? defaultOpen) : fn))
   const meta = GROUP_META[cat] ?? { label: cat, icon: '📺' }
 
   return (
@@ -133,6 +140,7 @@ export default function Sidebar({ currentChannelId }) {
   const { isSidebarOpen, channels } = useStore()
   const navigate  = useNavigate()
   const activeRef = useRef(null)
+  const listRef   = useRef(null)
   const [query, setQuery]       = useState('')
   const [catFilter, setCatFilter] = useState('all')
 
@@ -171,16 +179,37 @@ export default function Sidebar({ currentChannelId }) {
   }, [grouped])
 
   useEffect(() => {
-    const el = activeRef.current
-    if (!el) return
-    const parent = el.closest('.overflow-y-auto')
-    if (!parent) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return }
-    const { top: eTop, bottom: eBot } = el.getBoundingClientRect()
-    const { top: pTop, bottom: pBot } = parent.getBoundingClientRect()
-    if (eTop < pTop || eBot > pBot) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const parent = listRef.current
+    if (!parent) return
+
+    const center = (smooth) => {
+      const el = parent.querySelector('[data-active="true"]')
+      if (!el) return false
+      // Scroll ONLY the sidebar's own list (never scrollIntoView, which also
+      // scrolls the page). Pin the active row to the vertical center so the
+      // next channel is always one click away without scrolling.
+      const eTop = el.getBoundingClientRect().top
+      const pTop = parent.getBoundingClientRect().top
+      const target = parent.scrollTop + (eTop - pTop) - (parent.clientHeight - el.offsetHeight) / 2
+      const clamped = Math.max(0, Math.min(target, parent.scrollHeight - parent.clientHeight))
+      parent.scrollTo({ top: clamped, behavior: smooth ? 'smooth' : 'auto' })
+      return true
     }
-  }, [currentChannelId])
+
+    // The grouped "All" view expands sections with a ~0.2s Framer Motion height
+    // animation, so the active row keeps shifting after the route changes.
+    // Re-center across a few frames until the layout settles, then once more
+    // after the animation completes.
+    let frames = 0
+    let raf
+    const tick = () => {
+      center(false)
+      if (++frames < 12) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    const t = setTimeout(() => center(true), 280)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t) }
+  }, [currentChannelId, grouped, catFilter, query])
 
   const totalLive = channels.filter((c) => c.isLive).length
 
@@ -252,7 +281,7 @@ export default function Sidebar({ currentChannelId }) {
           </div>
 
           {/* ── Channel list ── */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={listRef} className="flex-1 overflow-y-auto">
             {liveChannels.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                 <span className="text-3xl mb-3">📺</span>
