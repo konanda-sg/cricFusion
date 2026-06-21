@@ -25,6 +25,15 @@ const INTERVAL_MS = 6000
 // Featured channels pinned to the hero carousel, in display order (by channel id).
 const FEATURED_IDS = [1002, 1005, 1028, 1029, 407]
 
+// Per-id hero backdrop images (online sources). Keyed by channel id.
+const FEATURED_IMAGES = {
+  1002: 'https://images.unsplash.com/photo-1540747913346-19212a4b423f?auto=format&fit=crop&w=1600&q=80', // Star Sports 1 — cricket stadium
+  1005: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=1600&q=80', // Star Sports 2 — cricket action
+  1028: 'https://images.unsplash.com/photo-1624555130581-1d9cca783bc0?auto=format&fit=crop&w=1600&q=80', // Sony LIV 1 — cricket pitch
+  1029: 'https://images.unsplash.com/photo-1593766827228-8737b4534aa6?auto=format&fit=crop&w=1600&q=80', // Sony LIV 2 — stadium lights
+  407:  'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80', // Fussball 1 — football stadium
+}
+
 export default function HeroSection() {
   const navigate    = useNavigate()
   const channels    = useStore((s) => s.channels)
@@ -38,6 +47,7 @@ export default function HeroSection() {
 
   const total = liveList.length
   const match = liveList[idx] ?? liveList[0]
+  const heroImg = match ? (FEATURED_IMAGES[match.id] ?? match.thumbnail) : null
 
   useEffect(() => { setImgFailed(false) }, [idx])
 
@@ -80,9 +90,9 @@ export default function HeroSection() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.65 }}
         >
-          {!imgFailed && match.thumbnail ? (
+          {!imgFailed && heroImg ? (
             <motion.img
-              src={match.thumbnail}
+              src={heroImg}
               alt=""
               className="w-full h-full object-cover"
               onError={() => setImgFailed(true)}
