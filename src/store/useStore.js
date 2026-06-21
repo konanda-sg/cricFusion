@@ -246,7 +246,7 @@ export const useStore = create((set, get) => ({
     tasks.push(
       fetch(STARSONY_URL, { cache: 'no-store' }).then((r) => r.json()).then((json) => {
         sources.starsony = (json?.channels || [])
-          .map((c, i) => mapStarSonyChannel(c, 500 + i + 1))
+          .map((c, i) => mapStarSonyChannel(c, 1000 + i + 1))
           .filter(Boolean)
         commit()
       }).catch((e) => console.warn('Star/Sony load failed:', e))
