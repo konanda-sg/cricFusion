@@ -58,8 +58,9 @@ function removeOverlay() {
 export function isDevToolsOpen() {
   // On mobile, outerHeight − innerHeight includes the address bar, nav bar and
   // status bar which can easily exceed 160 px — skip the size heuristic there.
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  if (isMobile) return false
+const isTouchDevice = navigator.maxTouchPoints > 0
+const isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+if (isTouchDevice || isMobileUA) return false
 
   const wDiff = window.outerWidth  - window.innerWidth
   const hDiff = window.outerHeight - window.innerHeight
